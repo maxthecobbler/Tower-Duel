@@ -23,17 +23,22 @@
     backdrop-filter:blur(2px)}
   #hud .gold{color:var(--accent);font-weight:bold;font-size:1.1em}
   #hud .dim{color:var(--dim);font-size:.9em}
-  #toolbar{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);z-index:3;
-    display:flex;gap:5px;align-items:stretch;
-    background:rgba(14,17,28,.78);padding:6px;border-radius:12px;border:1px solid #2c3050;
-    backdrop-filter:blur(2px);
-    transition:transform .45s cubic-bezier(.5,-0.2,.6,1), opacity .35s}
-  #toolbar.away{transform:translateX(-50%) translateY(150%);opacity:0;pointer-events:none}
-  .tool{background:var(--panel2);border:2px solid #333a5c;border-radius:8px;color:var(--text);
-    font-family:inherit;padding:4px 7px;cursor:pointer;text-align:center;min-width:70px;transition:all .1s}
-  .tool:hover:not(:disabled){border-color:var(--accent);transform:translateY(-2px)}
+  #toolbar{display:flex;gap:5px;align-items:stretch;flex-wrap:wrap;justify-content:center;
+    margin-top:10px;width:min(96vw,940px);
+    background:var(--panel);padding:8px;border-radius:12px;border:1px solid #2c3050;
+    transition:opacity .3s}
+  #toolbar.away{opacity:.45;pointer-events:none}
+  .tool{position:relative;background:var(--panel2);border:2px solid #333a5c;border-radius:8px;color:var(--text);
+    font-family:inherit;padding:4px 7px;cursor:pointer;text-align:center;min-width:70px;transition:all .1s;user-select:none}
+  .tool:hover:not(:disabled):not(.disabled){border-color:var(--accent);transform:translateY(-2px)}
   .tool.selected{border-color:var(--accent);background:#3a3417}
-  .tool:disabled{opacity:.35;cursor:not-allowed}
+  .tool:disabled,.tool.disabled{opacity:.35;cursor:not-allowed}
+  .tool .lvl{color:var(--good);font-size:.85em;font-weight:bold}
+  .tool .up{position:absolute;top:-9px;right:-6px;background:#2a3f2b;border:1px solid var(--good);
+    color:var(--good);border-radius:8px;font-family:inherit;font-size:.68em;font-weight:bold;
+    padding:1px 5px;cursor:pointer;line-height:1.3}
+  .tool .up:hover:not(:disabled){background:var(--good);color:#102412}
+  .tool .up:disabled{opacity:.4;cursor:not-allowed}
   .tool .ic{font-size:1.2em}
   .tool .nm{font-size:.75em;display:block}
   .tool .cs{color:var(--accent);font-size:.75em;font-weight:bold}
@@ -62,7 +67,18 @@
     letter-spacing:3px}
   #menu .status{color:var(--dim);font-size:.9em;min-height:1.2em}
   #menu .code{color:var(--accent);font-size:1.6em;font-weight:bold;letter-spacing:6px}
-  #tip{position:absolute;bottom:76px;left:50%;transform:translateX(-50%);z-index:4;
+  #verBtn{cursor:pointer;text-decoration:underline dotted}
+  #verBtn:hover{color:var(--accent)}
+  #notes{position:absolute;inset:0;background:rgba(10,12,22,.96);border-radius:8px;z-index:7;
+    display:none;flex-direction:column;padding:14px 18px}
+  #notes.show{display:flex}
+  #notes h2{color:var(--accent);letter-spacing:2px;margin-bottom:8px;flex:none}
+  #notesBody{overflow-y:auto;flex:1;font-size:.85em;line-height:1.5;padding-right:8px}
+  #notesBody h3{color:var(--accent);margin:10px 0 2px;font-size:1.05em}
+  #notesBody li{margin-left:18px;color:var(--text)}
+  #notesClose{flex:none;align-self:center;margin-top:10px;background:var(--accent);border:none;
+    border-radius:8px;padding:8px 24px;font-family:inherit;font-weight:bold;cursor:pointer;color:#221a05}
+  #tip{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);z-index:4;
     background:rgba(14,17,28,.95);border:1px solid var(--accent);border-radius:8px;
     padding:7px 12px;font-size:.8em;max-width:340px;text-align:center;color:var(--text);
     pointer-events:none;display:none}
@@ -75,18 +91,20 @@
 <div id="wrap">
   <canvas id="cv" width="448" height="240"></canvas>
   <div id="hud">
-    <span>Turn <b id="turnNo">1</b></span>
+    <span><span id="turnWord">Turn</span> <b id="turnNo">1</b></span>
     <span class="gold">💰 <span id="gold">0</span></span>
-    <span class="dim">+<span id="incomeLbl">0</span>/turn</span>
+    <span class="dim">+<span id="incomeLbl">0</span><span id="incomeUnit">/turn</span></span>
+    <span style="color:#c9a0ff;font-weight:bold">🔮 <span id="magic">0</span></span>
+    <span class="dim">+<span id="magicIncLbl">0</span><span id="magicIncUnit">/turn</span></span>
     <span class="dim">🔵 <b id="pHp" style="color:var(--you)"></b> HP · L<b id="pLv" style="color:var(--you)">1</b></span>
     <span class="dim">🔴 <b id="bHp" style="color:var(--bot)"></b> HP · L<b id="bLv" style="color:var(--bot)">1</b></span>
   </div>
-  <div id="toolbar"></div>
   <div id="tip"></div>
   <div id="banner"><div class="big" id="bannerText"></div><button onclick="bannerAction()">↺ Play Again</button></div>
   <div id="menu">
-    <h2>🏰 TOWER DUEL <span style="font-size:.5em;color:var(--dim)">v8</span></h2>
-    <button onclick="menuBot()">🤖 Play vs Bot</button>
+    <h2>🏰 TOWER DUEL <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">v23</span></h2>
+    <button onclick="menuBot()">🤖 Play vs Bot (turn-based)</button>
+    <button onclick="menuBlitz()">⚡ Blitz vs Bot (real-time!)</button>
     <button onclick="menuCreate()">🔒 Create Private Room</button>
     <div class="joinrow">
       <input id="joinCode" maxlength="4" placeholder="CODE">
@@ -95,42 +113,88 @@
     <div class="status" id="menuStatus"></div>
     <div class="code" id="menuCode"></div>
   </div>
+  <div id="notes">
+    <h2>📜 PATCH NOTES</h2>
+    <div id="notesBody"></div>
+    <button id="notesClose" onclick="hideNotes()">✕ Close</button>
+  </div>
 </div>
+<div id="toolbar"></div>
 <div id="msg">Select a building or troop, then click your (left) side to place it. <kbd>Esc</kbd>/right-click to deselect.</div>
 
 <script>
 "use strict";
+
 // ============================== CONSTANTS ==============================
 const CELL=16, COLS=26, ROWS=13, W=COLS*CELL, H=ROWS*CELL, PAD=16;
 const P_MAXCOL=11, B_MINCOL=14;              // territories (12-13 = no man's land)
 const TOWER_HP=200, START_GOLD=14, BASE_INCOME=8, HARVEST_INCOME=3;
+const START_MAGIC=5, BASE_MAGIC=1;
 const BATTLE_MAX=15;                          // seconds per battle phase
 
 const KINDS = {
   wall:     {label:"Wall",     icon:"🧱", cost:3,  hp:40,  building:true},
   harvester:{label:"Harvester",icon:"🌾", cost:5,  hp:20,  building:true},
   turret:   {label:"Turret",   icon:"🗼", cost:8,  hp:30,  building:true, range:90, dmg:5, cd:1.4, aoe:22},
-  duck:     {label:"Duck",     icon:"🦆", cost:6,  hp:16,  building:true, water:true, range:70, cd:1.0, slow:1.6},
-  soldier:  {label:"Soldier",  icon:"⚔️", cost:4,  hp:14,  troop:true, spd:32, range:11, dmg:3, cd:0.7, aggro:60},
+  duck:     {label:"Duck",     icon:"🦆", cost:6,  hp:16,  building:true, water:true, range:70, cd:1.0, slow:1.6, dmg:0.1},
+  magicwell:{label:"Mana Well",icon:"🔮", cost:5,  hp:20,  building:true, magicWater:true},
+  soldier:  {label:"Soldier",  icon:"⚔️", cost:4,  hp:10,  troop:true, spd:32, range:11, dmg:3, cd:0.7, aggro:60},
   archer:   {label:"Archer",   icon:"🏹", cost:6,  hp:9,   troop:true, spd:26, range:66, dmg:2, cd:0.9, aggro:95},
   brute:    {label:"Brute",    icon:"🛡️", cost:10, hp:38,  troop:true, spd:16, range:13, dmg:8, cd:1.2, aggro:38},
   fireball: {label:"Fireball", icon:"🔥", cost:8,  spell:true, dmg:14, dmgBuilding:7, dmgTower:5, radius:32},
   heal:     {label:"Heal",     icon:"💚", cost:6,  spell:true, instant:true, hps:2, dur:6, radius:16},
   shield:   {label:"Shield",   icon:"🫧", cost:8,  spell:true, instant:true, shield:10, radius:32},
 };
+// per-card tech upgrades, L1 = base stats. Applies to ALL your units of that kind (existing + future).
+const TECH={
+  wall:     [null,{cost:0,hp:40},              {cost:6, hp:55},              {cost:12,hp:75},              {cost:20,hp:100}],
+  harvester:[null,{cost:0,inc:3},              {cost:8, inc:4},              {cost:14,inc:5},              {cost:22,inc:7}],
+  magicwell:[null,{cost:0,inc:3},              {cost:8, inc:4},              {cost:14,inc:5},              {cost:22,inc:7}],
+  turret:   [null,{cost:0,dmg:5,range:90,cd:1.4},{cost:10,dmg:6,range:98,cd:1.2},{cost:18,dmg:8,range:108,cd:1.0},{cost:30,dmg:10,range:120,cd:0.8}],
+  duck:     [null,{cost:0,cd:1.0,slow:1.6},    {cost:6, cd:0.8,slow:2.0},    {cost:10,cd:0.65,slow:2.4},   {cost:16,cd:0.5,slow:3.0}],
+  soldier:  [null,{cost:0,hp:10,dmg:3,cd:0.7}, {cost:8, hp:13,dmg:4,cd:0.62},{cost:14,hp:16,dmg:5,cd:0.55},{cost:22,hp:20,dmg:6,cd:0.48}],
+  archer:   [null,{cost:0,hp:9,dmg:2,cd:0.9,range:66},{cost:8,hp:11,dmg:3,cd:0.8,range:74},{cost:14,hp:13,dmg:4,cd:0.7,range:82},{cost:22,hp:16,dmg:5,cd:0.6,range:92}],
+  brute:    [null,{cost:0,spd:16,cd:1.2},      {cost:8, spd:20,cd:1.05},     {cost:14,spd:24,cd:0.9},      {cost:22,spd:29,cd:0.75}],
+  fireball: [null,{cost:0,dmg:14,dmgBuilding:7,radius:32},{cost:10,dmg:17,dmgBuilding:9,radius:40},{cost:18,dmg:21,dmgBuilding:11,radius:48},{cost:28,dmg:26,dmgBuilding:13,radius:56}],
+  heal:     [null,{cost:0,hps:2,radius:16},    {cost:8, hps:2.5,radius:24},  {cost:14,hps:3,radius:32},    {cost:22,hps:4,radius:40}],
+  shield:   [null,{cost:0,radius:32},          {cost:8, radius:40},          {cost:14,radius:48},          {cost:22,radius:56}],
+};
+let techs={p:{},b:{}};
+function techLvl(side,kind){ return techs[side][kind]||1; }
+// stat lookup honouring the side's tech level; falls back to base KINDS stats
+function tstat(side,kind,field){
+  const t=TECH[kind];
+  if(t){ const v=t[techLvl(side,kind)][field]; if(v!==undefined) return v; }
+  return KINDS[kind][field];
+}
+function applyTech(side,card){
+  const lvl=techLvl(side,card);
+  if(!TECH[card] || lvl>=4) return;
+  techs[side][card]=lvl+1;
+  const nw=TECH[card][lvl+1];
+  if(nw.hp!==undefined)                       // hp upgrades buff units already on the field
+    for(const e of ents)
+      if(!e.dead && e.side===side && e.kind===card){
+        e.hp+=nw.hp-e.maxHp; e.maxHp=nw.hp;
+        puff(e.x,e.y-4,PAL.gold,4);
+      }
+  sfx("coin");
+}
+
 // tower upgrade levels (L1 = starting stats)
 const TOWER_LEVELS=[null,
-  {cost:0,  dmg:2, cd:0.90, range:78,  hp:200},
-  {cost:15, dmg:3, cd:0.80, range:88,  hp:240},
-  {cost:30, dmg:4, cd:0.70, range:98,  hp:290},
-  {cost:50, dmg:6, cd:0.55, range:112, hp:350},
+  {cost:0,  dmg:2, cd:0.90, range:85,  hp:200},   // 85 > base archer reach (66 + tower edge 15)
+  {cost:15, dmg:3, cd:0.80, range:95,  hp:240},
+  {cost:30, dmg:4, cd:0.70, range:105, hp:290},
+  {cost:50, dmg:6, cd:0.55, range:118, hp:350},   // 118 > L4 archer reach (92 + 15)
 ];
 const TIPS={
   wall:"40 HP — Blocks enemy troops. Connects with adjacent walls.",
-  harvester:"20 HP — Earns +3 gold every turn. Warning: its killer loots 25% of its lifetime earnings!",
+  harvester:"20 HP — Earns +3 gold every turn. Its killer loots 25% of its lifetime earnings — but it EXPLODES on death: 12 dmg to all enemies within 2 tiles!",
   turret:"30 HP — Cannonball: 5 splash dmg every 1.4s, range 90.",
-  duck:"16 HP — Water only! Squirts water at enemy troops (range 70): slows them 50% for 1.6s.",
-  soldier:"14 HP — 3 dmg / 0.7s melee. Speed 32, detection 60.",
+  duck:"16 HP — Blue water only! Squirts water at enemy troops (range 70): slows them 50% for 1.6s and deals 0.1 dmg. Ferocious.",
+  magicwell:"20 HP — Place on a PURPLE magic pond. Harvests +3 🔮 magic every turn (spells cost magic). Its killer loots 25% of its lifetime earnings!",
+  soldier:"10 HP — 3 dmg / 0.7s melee. Speed 32, detection 60.",
   archer:"9 HP — 2 dmg / 0.9s at range 66. Speed 26, detection 95 (spots enemies early).",
   brute:"38 HP — 8 dmg / 1.2s melee. Slow (16) with tiny detection 38: marches straight for the tower.",
   fireball:"Launches from your tower, lands where placed. 2-tile blast: 14 dmg to troops, 7 to buildings, 5 to towers. Sets trees on fire!",
@@ -150,10 +214,17 @@ const PAL = {
 // ============================== STATE ==============================
 let ents=[], projs=[], parts=[], texts=[];
 let spellsQueued=[], myMarkers=[], fireballs=[], scorches=[];
-let fires=[], healZones=[], moneybags=[], upgradeQueued=false;
+let fires=[], healZones=[], moneybags=[], upgradeQueued=false, pendingTech={};
+const TROOP_LIMIT=3;                       // max troops ALIVE per side (total, not per turn)
+function troopCount(side){ return ents.filter(e=>e.side===side && e.troop && !e.dead).length; }
+const SELL_RATE=0.5;                       // sell refunds 50% of the card's gold cost
 let turn, phase, battleT, selected=null, hover=null, shake=0, animT=0, over=false;
 let golds={p:0,b:0};                       // both sides' gold (opponent's is fully computable)
+let magics={p:0,b:0};                      // magic: harvested from purple ponds, fuels spells
 let mode="bot", mySide="p", oppSide="b";   // online: server assigns side
+let RT=false, rtT=0;                       // Blitz mode: real-time, no turns (vs bot)
+const RT_TICK=6;                           // seconds between income/bot "turns" in Blitz
+function canBuild(){ return !menuOpen && !waitingOrders && (phase==="build" || (RT && phase==="battle")); }
 let myOrders=[], waitingOrders=false, menuOpen=true;
 
 // seeded RNG so online battles are identical on both clients
@@ -214,18 +285,19 @@ function applyUpgrade(side){
   sfx("coin");
 }
 function makeBuilding(side,kind,gx,gy){
-  const k=KINDS[kind];
+  const hp=tstat(side,kind,"hp");
   return {side, kind, building:true, gx, gy, x:cellCx(gx), y:cellCx(gy),
-    hp:k.hp, maxHp:k.hp, cd:0};
+    hp, maxHp:hp, cd:0};
 }
 function makeTroop(side,kind,x,y){
-  const k=KINDS[kind];
+  const hp=tstat(side,kind,"hp");
   // cd/step deterministic (derived from position) so online sims stay in lockstep
-  return {side, kind, troop:true, x, y, hp:k.hp, maxHp:k.hp,
+  return {side, kind, troop:true, x, y, hp, maxHp:hp,
     cd:((x+y)/CELL%4|0)*0.07, step:(x/CELL|0)%6};
 }
 
-function income(side){ return BASE_INCOME + HARVEST_INCOME*ents.filter(e=>e.side===side&&e.kind==="harvester").length; }
+function income(side){ return BASE_INCOME + tstat(side,"harvester","inc")*ents.filter(e=>e.side===side&&e.kind==="harvester").length; }
+function magicIncome(side){ return BASE_MAGIC + tstat(side,"magicwell","inc")*ents.filter(e=>e.side===side&&e.kind==="magicwell").length; }
 function troopsAlive(side){ return ents.some(e=>e.troop && e.side===side); }
 
 // ============================== PARTICLES / VFX ==============================
@@ -251,22 +323,63 @@ function bagAt(gx,gy){ return moneybags.some(b=>b.gx===gx && b.gy===gy); }
 function validSpot(side,gx,gy,kind){
   if(!inTerritory(side,gx) || gy<0 || gy>=ROWS) return false;
   if(occupied(gx,gy) || bagAt(gx,gy)) return false;
-  if(kind==="duck") return pondCell(gx,gy);       // ducks live ON the water
+  const pond=pondAt(gx,gy);
+  if(kind==="duck")      return !!pond && !pond.magic;   // ducks live on BLUE water
+  if(kind==="magicwell") return !!pond && !!pond.magic;  // mana wells on PURPLE water
   return !blockedCell(gx,gy);
 }
 function canPlace(gx,gy){
+  if(selected==="sell") return false;
   if(selected && KINDS[selected] && KINDS[selected].spell) return canPlaceSpell(gx,gy);
-  return phase==="build" && validSpot(mySide,gx,gy,selected);
+  if(selected && KINDS[selected] && KINDS[selected].troop && troopCount(mySide)>=TROOP_LIMIT) return false;
+  return canBuild() && validSpot(mySide,gx,gy,selected);
 }
-function canPlaceSpell(gx,gy){ return phase==="build" && gx>=0 && gx<COLS && gy>=0 && gy<ROWS; }
-// cost of an order list for a given side (upgrade cost depends on that side's tower level)
+function sellableAt(side,gx,gy){
+  return ents.find(o=>!o.dead && !o.selling && o.side===side && o.building && o.kind!=="tower" &&
+    o.gx!==undefined && gx>=o.gx && gx<o.gx+(o.gw||1) && gy>=o.gy && gy<o.gy+(o.gh||1));
+}
+function sellAt(gx,gy){
+  if(!canBuild()) return;
+  const e=sellableAt(mySide,gx,gy);
+  if(!e){ setMsgText("Nothing of yours to sell there."); return; }
+  if(e.pending){ setMsgText("Can't sell something placed this turn."); return; }
+  const refund=Math.floor(KINDS[e.kind].cost*SELL_RATE);
+  golds[mySide]+=refund;
+  if(mode==="online"){
+    e.selling=true;                              // ghosted until the turn resolves
+    myOrders.push({kind:"sell",gx:e.gx,gy:e.gy});
+  } else {
+    e.dead=true; ents=ents.filter(o=>!o.dead);
+  }
+  floatText(e.x,e.y-12,"+"+refund+" 💰",PAL.gold);
+  for(let i=0;i<6;i++) parts.push({x:e.x,y:e.y,vx:rnd(-35,35),vy:rnd(-50,-15),life:rnd(.35,.6),t:0,size:rnd(1,2),color:PAL.gold});
+  sfx("coin");
+  refreshUI();
+}
+function canPlaceSpell(gx,gy){ return canBuild() && gx>=0 && gx<COLS && gy>=0 && gy<ROWS; }
+// GOLD cost of an order list (spells excluded — they cost magic)
 function costOfSide(side,orders){
   let s=0, lvl=(towerOf(side)||{level:1}).level;
+  const tl={};
   for(const o of orders){
     if(o.kind==="upgrade"){ lvl=Math.min(4,lvl+1); s+=TOWER_LEVELS[lvl].cost; }
+    else if(o.kind==="tech" && TECH[o.card]){
+      const nx=Math.min(4,(tl[o.card] ?? techLvl(side,o.card))+1);
+      tl[o.card]=nx; s+=TECH[o.card][nx].cost;
+    }
+    else if(o.kind==="sell"){                     // sells are NEGATIVE cost (a refund)
+      const e=ents.find(t=>!t.dead && t.side===side && t.building && t.kind!=="tower" &&
+        t.gx===o.gx && t.gy===o.gy);
+      if(e) s-=Math.floor(KINDS[e.kind].cost*SELL_RATE);
+    }
+    else if(KINDS[o.kind] && KINDS[o.kind].spell){ /* magic, handled by costMagicOf */ }
     else s+=(KINDS[o.kind]?KINDS[o.kind].cost:9999);
   }
   return s;
+}
+// MAGIC cost of an order list
+function costMagicOf(orders){
+  return orders.reduce((s,o)=>s+(KINDS[o.kind]&&KINDS[o.kind].spell?KINDS[o.kind].cost:0),0);
 }
 function spawn(side,kind,gx,gy,pending){
   const k=KINDS[kind];
@@ -276,21 +389,23 @@ function spawn(side,kind,gx,gy,pending){
   return e;
 }
 function place(kind,gx,gy){
-  if(menuOpen||waitingOrders) return;
+  if(!canBuild()) return;
   const k=KINDS[kind];
   if(k.spell){
-    if(golds[mySide]<k.cost || !canPlaceSpell(gx,gy)) return;
-    golds[mySide]-=k.cost;
+    if(magics[mySide]<k.cost || !canPlaceSpell(gx,gy)) return;   // spells cost MAGIC
+    magics[mySide]-=k.cost;
     const x=cellCx(gx), y=cellCx(gy);
     myMarkers.push({x,y,kind});
     if(mode==="online") myOrders.push({kind,gx,gy});
     else spellsQueued.push({side:mySide,x,y,kind});
+    if(RT) launchSpells();                        // Blitz: spells fire the moment you cast them
     puff(x,y, kind==="heal"?"#6ee77a":"#ff9c40", 8);
     sfx("place");
     refreshUI();
     return;
   }
-  if(golds[mySide]<k.cost || phase!=="build" || !validSpot(mySide,gx,gy,kind)) return;
+  if(k.troop && troopCount(mySide)>=TROOP_LIMIT){ setMsgText(`Troop limit: max ${TROOP_LIMIT} troops alive at once.`); return; }
+  if(golds[mySide]<k.cost || !validSpot(mySide,gx,gy,kind)) return;
   golds[mySide]-=k.cost;
   spawn(mySide,kind,gx,gy, mode==="online");
   if(mode==="online") myOrders.push({kind,gx,gy});
@@ -301,57 +416,152 @@ function place(kind,gx,gy){
 
 // ============================== BOT AI ==============================
 function botBuild(){
-  const myHarv=()=>ents.filter(e=>e.side==="b"&&e.kind==="harvester").length;
-  const myWalls=()=>ents.filter(e=>e.side==="b"&&e.kind==="wall").length;
-  const myTurrets=()=>ents.filter(e=>e.side==="b"&&e.kind==="turret").length;
-  const threat = ents.filter(e=>e.side==="p"&&e.troop).length;
+  const mine =k=>ents.filter(e=>e.side==="b"&&e.kind===k&&!e.dead);
+  const yours=k=>ents.filter(e=>e.side==="p"&&e.kind===k&&!e.dead);
+  const pTroops=ents.filter(e=>e.side==="p"&&e.troop&&!e.dead);
+  const bTroops=()=>ents.filter(e=>e.side==="b"&&e.troop&&!e.dead);
+  // player attack potential (dps-ish) vs my defensive power
+  const dps=e=>tstat(e.side,e.kind,"dmg")/tstat(e.side,e.kind,"cd");
+  const pPower=pTroops.reduce((s,e)=>s+dps(e),0);
+  const myDefPower=mine("turret").reduce((s,e)=>s+dps(e),0)+mine("wall").length*1.5;
 
-  // occasionally lob a fireball at the player's densest cluster
-  if(turn>=2 && golds.b>=KINDS.fireball.cost && Math.random()<.45){
-    const targets=ents.filter(e=>e.side==="p" && e.kind!=="tower");
-    let best=null, bestScore=1;
-    for(const t of targets){
-      const score=targets.filter(o=>hyp(o.x-t.x,o.y-t.y)<=30).length;
-      if(score>bestScore){ bestScore=score; best=t; }
-    }
-    if(best){ golds.b-=KINDS.fireball.cost; spellsQueued.push({side:"b",x:best.x,y:best.y}); }
-  }
-
-  function tryPlace(kind,colMin,colMax){
+  function placeAt(kind,gx,gy){
     const k=KINDS[kind];
     if(golds.b<k.cost) return false;
-    for(let tries=0;tries<25;tries++){
-      const gx=Math.floor(rnd(colMin,colMax+1)), gy=Math.floor(rnd(0,ROWS));
-      if(validSpot("b",gx,gy,kind)){
-        golds.b-=k.cost;
-        spawn("b",kind,gx,gy);
-        puff(cellCx(gx),cellCx(gy),PAL.bot,8);
-        return true;
-      }
+    if(k.troop && troopCount("b")>=TROOP_LIMIT) return false;  // 3 alive max, same as the player
+    if(!validSpot("b",gx,gy,kind)) return false;
+    golds.b-=k.cost;
+    spawn("b",kind,gx,gy);
+    puff(cellCx(gx),cellCx(gy),PAL.bot,8);
+    return true;
+  }
+  function placeNear(kind,gx,gy,spread){  // try exact spot, then wander outward
+    if(placeAt(kind,gx,gy)) return true;
+    for(let tries=0;tries<20;tries++){
+      const x=gx+Math.floor(rnd(-spread,spread+1)), y=gy+Math.floor(rnd(-spread,spread+1));
+      if(placeAt(kind,x,y)) return true;
     }
     return false;
   }
 
-  // bot upgrades its tower when flush with gold
+  // ---- 1) mana wells: always claim the purple pond (up to 2) ----
+  if(mine("magicwell").length<2){
+    outer:
+    for(let gx=B_MINCOL;gx<COLS;gx++)
+      for(let gy=0;gy<ROWS;gy++)
+        if(validSpot("b",gx,gy,"magicwell")){ placeAt("magicwell",gx,gy); break outer; }
+  }
+
+  // ---- 2) economy: grow harvesters toward a turn-scaled target, tucked in back corners ----
+  const harvTarget=Math.min(6, 2+Math.floor(turn/2));
+  let ecoBuilt=0;
+  while(mine("harvester").length<harvTarget && ecoBuilt<2 && pPower<myDefPower+6 && golds.b>=KINDS.harvester.cost+4){
+    const row = mine("harvester").length%2===0 ? Math.floor(rnd(0,3)) : Math.floor(rnd(10,13));
+    if(!placeNear("harvester",Math.floor(rnd(21,25)),row,2)) break;
+    ecoBuilt++;
+  }
+
+  // ---- 3) defense: wall line + turrets between the enemy and my tower, scaled to the threat ----
+  if(pPower>myDefPower){
+    let wallsBuilt=0;
+    for(const r of [5,6,7,4,8]){                       // shield the tower rows first
+      if(wallsBuilt>=3 || golds.b<KINDS.wall.cost+4) break;
+      if(placeAt("wall",20,r)||placeAt("wall",19,r)) wallsBuilt++;
+    }
+    while(mine("turret").length<Math.min(4,1+Math.floor(turn/3)) && golds.b>=KINDS.turret.cost+6){
+      if(!placeNear("turret",22,5+Math.floor(rnd(-1,3)),2)) break;
+    }
+    // a duck slows pushes if there's blue water on my side
+    if(pTroops.length>=3 && mine("duck").length<1 && golds.b>=KINDS.duck.cost+4){
+      outer2:
+      for(let gx=B_MINCOL;gx<COLS;gx++)
+        for(let gy=0;gy<ROWS;gy++){
+          const p=pondAt(gx,gy);
+          if(p&&!p.magic&&validSpot("b",gx,gy,"duck")){ placeAt("duck",gx,gy); break outer2; }
+        }
+    }
+  }
+
+  // ---- 4) tech: strict priority list, bought with a cash buffer ----
+  const techWish=[];
+  if(mine("harvester").length>=3) techWish.push("harvester");
+  if(mine("magicwell").length>=1 && techLvl("b","magicwell")<2) techWish.push("magicwell");
+  if(mine("turret").length>=2) techWish.push("turret");
+  if(pTroops.length>=3) techWish.push("wall");
+  techWish.push(yours("wall").length>=3 ? "brute" : "soldier");   // brutes crack wall-heavy players
+  if(turn>=5) techWish.push("archer","fireball");
+  for(const card of techWish){
+    if(techLvl("b",card)>=4) continue;
+    const cost=TECH[card][techLvl("b",card)+1].cost;
+    if(golds.b>=cost+10){ golds.b-=cost; applyTech("b",card); }
+    break;                                              // at most one tech per turn
+  }
+
+  // ---- 5) tower upgrade on surplus ----
   {
     const t=towerOf("b");
     if(t && t.level<4){
       const cost=TOWER_LEVELS[t.level+1].cost;
-      if(golds.b>=cost+8 && Math.random()<.5){ golds.b-=cost; applyUpgrade("b"); }
+      if(golds.b>=cost+14){ golds.b-=cost; applyUpgrade("b"); }
     }
   }
 
-  let guard=0;
-  while(golds.b>=3 && guard++<24){
-    if(turn<=2 && myHarv()<3 && tryPlace("harvester",21,24)) continue;
-    if(threat>=2 && myWalls()<threat+2 && tryPlace("wall",18,20)) continue;
-    if(threat>=1 && myTurrets()<3 && golds.b>=8 && Math.random()<.5 && tryPlace("turret",20,22)) continue;
-    if(golds.b>=10 && Math.random()<.35 && tryPlace("brute",14,16)) continue;
-    if(golds.b>=6 && Math.random()<.4 && tryPlace("archer",14,16)) continue;
-    if(golds.b>=4 && tryPlace("soldier",14,16)) continue;
-    if(golds.b>=5 && myHarv()<7 && tryPlace("harvester",21,24)) continue;
-    break;
+  // ---- 6) attack wave: pick the player's weakest row and commit a focused push ----
+  const laneDef=r=>ents.filter(e=>e.side==="p"&&e.building&&!e.dead&&Math.abs(e.gy-r)<=1)
+    .reduce((s,e)=>s+(e.kind==="turret"?3:e.kind==="tower"?4:1),0);
+  let lane=6, bestDef=1e9;
+  for(const r of [1,3,5,6,7,9,11]){ const d=laneDef(r)+rnd(0,.5); if(d<bestDef){bestDef=d;lane=r;} }
+  const waveBudget=golds.b;
+  if(waveBudget>=13 || (pPower>myDefPower+4 && waveBudget>=8)){
+    const wantBrute = yours("wall").length>=2 || yours("turret").length>=2;
+    if(wantBrute && golds.b>=KINDS.brute.cost) placeNear("brute",14,lane,1);
+    placeNear("soldier",15,lane===12?11:lane+1,1);
+    if(golds.b>=KINDS.archer.cost) placeNear("archer",16,lane,1);
+    else placeNear("soldier",15,lane===0?1:lane-1,1);
   }
+
+  // ---- 7) spells ----
+  // fireball: value-scored blast point — static economy/defense targets are worth the most
+  if(turn>=2 && magics.b>=KINDS.fireball.cost){
+    const r=tstat("b","fireball","radius");
+    const targets=ents.filter(e=>e.side==="p"&&!e.dead);
+    let best=null, bestScore=0;
+    for(const c of targets){
+      if(c.kind==="tower") continue;
+      let s=0;
+      for(const o of targets){
+        if(hyp(o.x-c.x,o.y-c.y)<=r)
+          s += o.kind==="harvester" ? 8+(o.harvested||0)*.25
+             : o.kind==="magicwell" ? 8+(o.harvested||0)*.25
+             : o.kind==="turret"    ? 7
+             : o.kind==="wall"      ? 2
+             : o.troop              ? 3 : 1;
+      }
+      if(s>bestScore){ bestScore=s; best=c; }
+    }
+    if(best && bestScore>=10){
+      magics.b-=KINDS.fireball.cost;
+      spellsQueued.push({side:"b",x:best.x,y:best.y,kind:"fireball"});
+    }
+  }
+  // shield + heal support a real push
+  const wave=bTroops();
+  if(wave.length>=3){
+    const cx=wave.reduce((s,e)=>s+e.x,0)/wave.length, cy=wave.reduce((s,e)=>s+e.y,0)/wave.length;
+    if(magics.b>=KINDS.shield.cost){
+      magics.b-=KINDS.shield.cost;
+      spellsQueued.push({side:"b",x:cx,y:cy,kind:"shield"});
+    }
+    if(magics.b>=KINDS.heal.cost){
+      magics.b-=KINDS.heal.cost;                        // zone a bit ahead, where the wave will march
+      spellsQueued.push({side:"b",x:Math.max(30,cx-45),y:cy,kind:"heal"});
+    }
+  }
+
+  // ---- 8) spare change: another harvester or a filler soldier ----
+  if(golds.b>=KINDS.harvester.cost+8 && mine("harvester").length<7)
+    placeNear("harvester",Math.floor(rnd(21,25)),Math.floor(rnd(0,13)),2);
+  if(golds.b>=KINDS.soldier.cost+10) placeNear("soldier",15,lane,2);
 }
 
 // ============================== COMBAT SIM ==============================
@@ -367,9 +577,9 @@ function nearestEnemy(e, troopsOnly=false){
 }
 // body radius used for surface-to-surface range checks & collision
 function bodyR(o){ return o.kind==="tower"?15 : o.building?7 : 3; }
-// troops in detection radius first, buildings second
+// priority inside detection radius: enemy troops > money bags > enemy buildings
 function acquireTarget(e, aggro){
-  let bestT=null,bdT=1e9, bestB=null,bdB=1e9;
+  let bestT=null,bdT=1e9, bestB=null,bdB=1e9, bestBag=null,bdBag=1e9;
   for(const o of ents){
     if(o.dead || o.side===e.side) continue;
     const d=dist(e,o) - bodyR(o);
@@ -377,7 +587,14 @@ function acquireTarget(e, aggro){
     if(o.troop){ if(d<bdT){bdT=d;bestT=o;} }
     else       { if(d<bdB){bdB=d;bestB=o;} }
   }
-  return bestT ? {t:bestT,d:bdT} : (bestB ? {t:bestB,d:bdB} : null);
+  for(const b of moneybags){
+    const d=hyp(e.x-b.x,e.y-b.y);
+    if(d<=aggro && d<bdBag){ bdBag=d; bestBag=b; }
+  }
+  if(bestT)   return {t:bestT,d:bdT};
+  if(bestBag) return {t:{x:bestBag.x,y:bestBag.y}, d:bdBag, bag:true};
+  if(bestB)   return {t:bestB,d:bdB};
+  return null;
 }
 // enemy buildings physically block troops (walls actually wall things off)
 function collideBuildings(e){
@@ -389,6 +606,7 @@ function collideBuildings(e){
   }
 }
 function damage(target,dmg,srcColor){
+  if(target.dead) return;                 // never re-trigger death effects (bounty/explosion)
   // shield bubbles absorb damage first
   if(target.shield>0){
     const ab=Math.min(target.shield,dmg);
@@ -402,18 +620,32 @@ function damage(target,dmg,srcColor){
     const big = target.kind==="tower"||target.kind==="brute";
     boom(target.x,target.y, target.side==="p"?PAL.you:PAL.bot, big?22:12, big);
     target.dead=true;
-    // harvester bounty: killer loots 25% of everything it harvested in its lifetime
-    if(target.kind==="harvester"){
+    // harvester/mana well bounty: killer loots 25% of its lifetime earnings (in its currency)
+    if(target.kind==="harvester"||target.kind==="magicwell"){
       const bounty=Math.floor((target.harvested||0)*0.25);
       if(bounty>0){
         const looter = target.side==="p" ? "b" : "p";
-        golds[looter]+=bounty;
-        floatText(target.x, target.y-14, "+"+bounty+" 💰", PAL.gold);
-        for(let i=0;i<6;i++)                         // coins scatter from the wreck
+        const magic = target.kind==="magicwell";
+        if(magic) magics[looter]+=bounty; else golds[looter]+=bounty;
+        floatText(target.x, target.y-14, "+"+bounty+(magic?" 🔮":" 💰"), magic?"#c9a0ff":PAL.gold);
+        for(let i=0;i<6;i++)                         // loot scatters from the wreck
           parts.push({x:target.x,y:target.y,vx:rnd(-40,40),vy:rnd(-60,-20),life:rnd(.4,.7),t:0,
-            size:rnd(1,2),color:PAL.gold});
+            size:rnd(1,2),color:magic?"#c9a0ff":PAL.gold});
         sfx("coin");
         refreshUI();
+      }
+    }
+    // harvesters are volatile: they explode on death, hurting everything NOT on their side (2-tile radius)
+    if(target.kind==="harvester"){
+      boom(target.x,target.y,"#ffd75e",22,true);
+      for(let i=0;i<12;i++){                          // grain blast ring
+        const a=i/12*Math.PI*2, s2=rnd(40,80);
+        parts.push({x:target.x,y:target.y,vx:Math.cos(a)*s2,vy:Math.sin(a)*s2,life:rnd(.3,.5),t:0,
+          size:rnd(1,2.5), color:Math.random()<.5?"#ffd75e":"#c9a24b"});
+      }
+      for(const o of ents){
+        if(o.dead || o===target || o.side===target.side) continue;
+        if(hyp(o.x-target.x,o.y-target.y) <= 32+bodyR(o)) damage(o,12,"#ffd75e");
       }
     }
     if(target.kind==="tower") endGame(target.side==="b");
@@ -452,8 +684,9 @@ function launchSpells(){
 function castInstant(s){
   const k=KINDS[s.kind];
   if(s.kind==="heal"){
-    // persistent healing zone: 2 HP/s for 6s to own troops/harvesters/walls
-    healZones.push({side:s.side, x:s.x, y:s.y, t:0, life:k.dur});
+    // persistent healing zone (radius & HP/s frozen at cast from the caster's tech level)
+    healZones.push({side:s.side, x:s.x, y:s.y, t:0, life:k.dur,
+      r:tstat(s.side,"heal","radius"), hps:tstat(s.side,"heal","hps")});
     parts.push({x:s.x,y:s.y,vx:0,vy:0,life:.22,t:0,size:13,color:"#b8ffc4",flash:true});
     for(let i=0;i<12;i++)
       parts.push({x:s.x+rnd(-10,10), y:s.y+rnd(-8,8), vx:rnd(-8,8), vy:rnd(-30,-10),
@@ -461,17 +694,18 @@ function castInstant(s){
     sfx("heal");
   }
   else if(s.kind==="shield"){
+    const radius=tstat(s.side,"shield","radius");
     // grant absorb shields to EVERYTHING of yours in the bubble (tower included)
-    parts.push({x:s.x,y:s.y,vx:0,vy:0,life:.3,t:0,size:k.radius*.7,color:"#bcd8ff",flash:true});
+    parts.push({x:s.x,y:s.y,vx:0,vy:0,life:.3,t:0,size:radius*.7,color:"#bcd8ff",flash:true});
     for(let i=0;i<16;i++){
       const a=i/16*Math.PI*2;
-      parts.push({x:s.x+Math.cos(a)*k.radius,y:s.y+Math.sin(a)*k.radius,
+      parts.push({x:s.x+Math.cos(a)*radius,y:s.y+Math.sin(a)*radius,
         vx:Math.cos(a)*8,vy:Math.sin(a)*8,life:rnd(.4,.7),t:0,size:rnd(1,2),color:"#7db4ff"});
     }
     sfx("heal");
     for(const e of ents){
       if(e.dead || e.side!==s.side) continue;
-      if(hyp(e.x-s.x,e.y-s.y) <= k.radius+bodyR(e)){
+      if(hyp(e.x-s.x,e.y-s.y) <= radius+bodyR(e)){
         e.shield=(e.shield||0)+k.shield;
         floatText(e.x,e.y-12,"🛡","#7db4ff");
       }
@@ -479,17 +713,17 @@ function castInstant(s){
   }
 }
 function updateHealZones(dt){
-  const k=KINDS.heal;
   for(const z of healZones){
     z.t+=dt;
+    const zr=z.r||KINDS.heal.radius, zhps=z.hps||KINDS.heal.hps;
     for(const e of ents){
       if(e.dead || e.side!==z.side) continue;
       if(!(e.troop || e.kind==="harvester" || e.kind==="wall")) continue;
-      if(e.hp<e.maxHp && hyp(e.x-z.x,e.y-z.y)<=k.radius+bodyR(e))
-        e.hp=Math.min(e.maxHp, e.hp+k.hps*dt);
+      if(e.hp<e.maxHp && hyp(e.x-z.x,e.y-z.y)<=zr+bodyR(e))
+        e.hp=Math.min(e.maxHp, e.hp+zhps*dt);
     }
     if(Math.random()<.25)
-      parts.push({x:z.x+rnd(-k.radius,k.radius)*.8, y:z.y+rnd(-k.radius,k.radius)*.8,
+      parts.push({x:z.x+rnd(-zr,zr)*.8, y:z.y+rnd(-zr,zr)*.8,
         vx:0, vy:rnd(-18,-8), life:rnd(.4,.8), t:0, size:1, color:Math.random()<.6?"#6ee77a":"#d9ffe0"});
   }
   healZones=healZones.filter(z=>z.t<z.life);
@@ -537,7 +771,9 @@ function spawnBag(rand){
   }
 }
 function spellImpact(f){
-  const k=KINDS[f.kind];
+  // stats honour the caster's fireball tech level
+  const radius=tstat(f.side,"fireball","radius");
+  const dmgT=tstat(f.side,"fireball","dmg"), dmgB=tstat(f.side,"fireball","dmgBuilding");
   // fireball detonation
   boom(f.tx,f.ty,"#ff9c40",26,true);
   for(let i=0;i<18;i++){                       // flame ring
@@ -549,15 +785,15 @@ function spellImpact(f){
   // full damage to enemy troops, reduced vs buildings, minimal vs the tower
   for(const e of ents){
     if(e.dead || e.side===f.side) continue;
-    if(hyp(e.x-f.tx,e.y-f.ty) <= k.radius+bodyR(e)-3){
-      const dmg = e.kind==="tower" ? k.dmgTower : e.building ? k.dmgBuilding : k.dmg;
+    if(hyp(e.x-f.tx,e.y-f.ty) <= radius+bodyR(e)-3){
+      const dmg = e.kind==="tower" ? KINDS.fireball.dmgTower : e.building ? dmgB : dmgT;
       damage(e, dmg, "#ff9c40");
     }
   }
   // trees in the blast burn down, leaving a fire that lasts 5-15s (seeded → same on both clients)
   for(const g of GROVES) for(const tr of g.trees){
     if(tr.dead) continue;
-    if(hyp(tr.x-f.tx,tr.y-f.ty) <= k.radius+tr.r){
+    if(hyp(tr.x-f.tx,tr.y-f.ty) <= radius+tr.r){
       tr.dead=true;
       fires.push({x:tr.x, y:tr.y, t:0, life:5+simRand()*10});
       for(let i=0;i<10;i++)                        // leaves scatter
@@ -590,8 +826,24 @@ function updateFireballs(dt){
   fireballs=fireballs.filter(f=>!f.done);
 }
 
+function rtEconomyTick(){
+  turn++;
+  golds.p+=income("p"); golds.b+=income("b");
+  magics.p+=magicIncome("p"); magics.b+=magicIncome("b");
+  for(const e of ents)
+    if(e.kind==="harvester"||e.kind==="magicwell")
+      e.harvested=(e.harvested||0)+tstat(e.side,e.kind,"inc");
+  for(const e of ents) if(e.kind==="harvester") puff(e.x,e.y-4,PAL.gold,3);
+  if(simRand()<0.5) spawnBag(simRand);
+  floatText(mySide==="p"?40:W-40, 90, "+"+income(mySide)+" 💰", PAL.gold);
+  sfx("coin");
+  botBuild();
+  launchSpells();                                 // bot's queued spells fire immediately in Blitz
+  refreshUI();
+}
 function updateBattle(dt){
   battleT+=dt;
+  if(RT){ rtT+=dt; if(rtT>=RT_TICK && !over){ rtT-=RT_TICK; rtEconomyTick(); } }
   updateFireballs(dt);
   updateHealZones(dt);
   updateFires(dt);
@@ -604,10 +856,11 @@ function updateBattle(dt){
       const k=KINDS[e.kind];
       const px0=e.x, py0=e.y;                     // for velocity tracking (shooters lead targets)
       e.slowT=Math.max(0,(e.slowT||0)-dt);
-      const spd=k.spd*(e.slowT>0?0.5:1);          // soaked troops move at half speed
+      const spd=tstat(e.side,e.kind,"spd")*(e.slowT>0?0.5:1);  // soaked troops move at half speed
+      const range=tstat(e.side,e.kind,"range");
       const n=acquireTarget(e,k.aggro);           // only reacts inside its detection radius
       if(n){
-        if(n.d>k.range){                          // close in on the acquired target
+        if(n.bag || n.d>range){                   // bags are walked to (picked up on contact), never attacked
           const d=dist(e,n.t)||1;
           e.x+=(n.t.x-e.x)/d*spd*dt;
           e.y+=(n.t.y-e.y)/d*spd*dt;
@@ -615,10 +868,11 @@ function updateBattle(dt){
           collideObstacles(e); collideBuildings(e);
           e.x=Math.max(4,Math.min(W-4,e.x)); e.y=Math.max(4,Math.min(H-4,e.y));
         } else if(e.cd<=0){
-          e.cd=k.cd;
-          if(e.kind==="archer") shoot(e,n.t,{dmg:k.dmg,color:e.side==="p"?PAL.you:PAL.bot,spd:150});
+          e.cd=tstat(e.side,e.kind,"cd");
+          const dmg=tstat(e.side,e.kind,"dmg");
+          if(e.kind==="archer") shoot(e,n.t,{dmg,color:e.side==="p"?PAL.you:PAL.bot,spd:150});
           else {
-            damage(n.t,k.dmg, e.side==="p"?PAL.you:PAL.bot);
+            damage(n.t,dmg, e.side==="p"?PAL.you:PAL.bot);
             puff(n.t.x,n.t.y,PAL.white,3);
           }
         }
@@ -638,26 +892,37 @@ function updateBattle(dt){
       e.vx=(e.x-px0)/dt; e.vy=(e.y-py0)/dt;
     }
     else if(e.kind==="turret"){
-      const k=KINDS.turret, n=nearestEnemy(e,true);
-      if(n && n.d<=k.range){
+      const range=tstat(e.side,"turret","range"), n=nearestEnemy(e,true);
+      if(n && n.d<=range){
         e.aim=Math.atan2(n.t.y-e.y,n.t.x-e.x);
         // splash damage: cannonball explodes on impact, hitting everything in the blast radius
-        if(e.cd<=0){ e.cd=k.cd; shoot(e,n.t,{dmg:k.dmg,aoe:k.aoe,color:"#ffb347",spd:110,size:2.5,lift:5,pkind:"ball"}); }
+        if(e.cd<=0){
+          e.cd=tstat(e.side,"turret","cd");
+          shoot(e,n.t,{dmg:tstat(e.side,"turret","dmg"),aoe:KINDS.turret.aoe,color:"#ffb347",spd:110,size:2.5,lift:5,pkind:"ball"});
+        }
       }
     }
     else if(e.kind==="duck"){
       const k=KINDS.duck, n=nearestEnemy(e,true);
       if(n && n.d<=k.range){
         e.aim=Math.atan2(n.t.y-e.y,n.t.x-e.x);
-        if(e.cd<=0){ e.cd=k.cd; shoot(e,n.t,{dmg:0,slow:k.slow,color:"#7db4ff",spd:170,pkind:"water"}); }
+        if(e.cd<=0){
+          e.cd=tstat(e.side,"duck","cd");
+          shoot(e,n.t,{dmg:KINDS.duck.dmg,slow:tstat(e.side,"duck","slow"),color:"#7db4ff",spd:170,pkind:"water"});
+        }
       }
     }
     else if(e.kind==="tower"){
       const L=TOWER_LEVELS[e.level||1];
-      const n=nearestEnemy(e,true);
-      if(n && n.d<=L.range && e.cd<=0){
-        e.cd=L.cd;
-        shoot(e,n.t,{dmg:L.dmg,color:e.side==="p"?PAL.you:PAL.bot,spd:140,lift:14});
+      if(e.cd<=0){
+        // multi-targeting: each volley fires at up to 3 nearest enemy troops in range
+        const targets=ents.filter(o=>o.troop && !o.dead && o.side!==e.side && dist(e,o)<=L.range)
+          .sort((a,b)=>dist(e,a)-dist(e,b)).slice(0,3);
+        if(targets.length){
+          e.cd=L.cd;
+          for(const t of targets)
+            shoot(e,t,{dmg:L.dmg,color:e.side==="p"?PAL.you:PAL.bot,spd:140,lift:14});
+        }
       }
     }
   }
@@ -674,9 +939,18 @@ function updateBattle(dt){
     }
     if(hit){
       p.life=0;
-      if(p.slow){                                  // duck water: no damage, just soaked
-        if(hit.troop){ hit.slowT=Math.max(hit.slowT||0,p.slow); floatText(hit.x,hit.y-10,"soaked!","#7db4ff"); }
-        for(let i=0;i<6;i++) parts.push({x:p.x,y:p.y,vx:rnd(-30,30),vy:rnd(-40,-5),life:rnd(.2,.4),t:0,size:rnd(1,2),color:"#7db4ff"});
+      if(p.slow){                                  // duck water: SPLASHES — soaks every enemy troop nearby
+        let soaked=0;
+        for(const o of ents){
+          if(o.dead || o.side===p.side || !o.troop) continue;
+          if(hyp(o.x-p.x,o.y-p.y)<=16){
+            o.slowT=Math.max(o.slowT||0,p.slow);
+            if(p.dmg>0) damage(o,p.dmg,"#7db4ff");
+            soaked++;
+          }
+        }
+        if(soaked) floatText(p.x,p.y-10,"splash!","#7db4ff");
+        for(let i=0;i<8;i++) parts.push({x:p.x,y:p.y,vx:rnd(-35,35),vy:rnd(-45,-5),life:rnd(.2,.45),t:0,size:rnd(1,2),color:"#7db4ff"});
       }
       else if(p.aoe){
         boom(p.x,p.y,PAL.gold,12);
@@ -694,16 +968,22 @@ function updateBattle(dt){
   projs=projs.filter(p=>p.life>0);
   ents=ents.filter(e=>!e.dead);
 
-  if(!over && fireballs.length===0 && (battleT>BATTLE_MAX || (!troopsAlive("p") && !troopsAlive("b")))) endBattle();
+  if(!RT && !over && fireballs.length===0 && (battleT>BATTLE_MAX || (!troopsAlive("p") && !troopsAlive("b")))) endBattle();
 }
 
 function endBattle(){
   phase="build"; turn++;
   const incMe=income(mySide), incOpp=income(oppSide);
   golds[mySide]+=incMe; golds[oppSide]+=incOpp;
-  // each harvester remembers its lifetime earnings (killers collect a 25% bounty)
-  for(const e of ents) if(e.kind==="harvester") e.harvested=(e.harvested||0)+HARVEST_INCOME;
-  spawnBag(simRand);                              // a fresh money bag appears each turn
+  magics.p+=magicIncome("p"); magics.b+=magicIncome("b");
+  // shield bubbles wear off at the end of the turn
+  for(const e of ents) e.shield=0;
+  for(const e of ents) if(e.kind==="magicwell") puff(e.x,e.y-4,"#c9a0ff",4);
+  // harvesters & mana wells remember lifetime earnings (killers collect a 25% bounty)
+  for(const e of ents)
+    if(e.kind==="harvester"||e.kind==="magicwell")
+      e.harvested=(e.harvested||0)+tstat(e.side,e.kind,"inc");
+  if(simRand()<0.5) spawnBag(simRand);            // 50% chance a fresh money bag appears
   upgradeQueued=false;
   floatText(mySide==="p"?40:W-40, 90, "+"+incMe+" 💰", PAL.gold);
   sfx("coin");
@@ -711,7 +991,8 @@ function endBattle(){
   // desync check: both clients compute the shared public state; host compares
   if(mode==="online"){
     const rep={pG:golds.p, bG:golds.b, pHp:towerHp("p"), bHp:towerHp("b"), n:ents.length, turn,
-      pLv:(towerOf("p")||{level:1}).level, bLv:(towerOf("b")||{level:1}).level, bags:moneybags.length};
+      pLv:(towerOf("p")||{level:1}).level, bLv:(towerOf("b")||{level:1}).level, bags:moneybags.length,
+      tp:techs.p, tb:techs.b, pM:magics.p, bM:magics.b};
     if(isHost){ myReport=rep; checkReports(); }
     else sendMsg({type:"report", rep});
   }
@@ -720,7 +1001,7 @@ function endBattle(){
 function towerHp(side){ const t=ents.find(e=>e.kind==="tower"&&e.side===side); return t?t.hp:0; }
 
 function startBattle(){
-  if(phase!=="build"||over||menuOpen) return;
+  if(RT||phase!=="build"||over||menuOpen) return;
   if(mode==="online"){
     if(waitingOrders||!conn) return;
     waitingOrders=true; selected=null;
@@ -740,14 +1021,19 @@ function startBattle(){
 function resolveOrders(data){
   waitingOrders=false; selected=null;
   ents=ents.filter(e=>!e.pending);              // replace my optimistic placements
-  golds[mySide]+=costOfSide(mySide,myOrders);   // refund, then deduct canonically below
-  myOrders=[]; upgradeQueued=false;
-  // both clients track both golds, so each can verify the other didn't overspend
-  for(const side of ["p","b"])
-    if(costOfSide(side,data[side]||[]) > golds[side]+1e-6){
+  golds[mySide]+=costOfSide(mySide,myOrders);   // refund both currencies, deduct canonically below
+  magics[mySide]+=costMagicOf(myOrders);
+  myOrders=[]; upgradeQueued=false; pendingTech={};
+  // both clients track both golds & magic, so each can verify the other didn't overspend
+  for(const side of ["p","b"]){
+    const troopOrders=(data[side]||[]).filter(o=>KINDS[o.kind]&&KINDS[o.kind].troop).length;
+    if(costOfSide(side,data[side]||[]) > golds[side]+1e-6 ||
+       costMagicOf(data[side]||[]) > magics[side]+1e-6 ||
+       troopCount(side)+troopOrders > TROOP_LIMIT){
       showBanner("⚠️ Invalid orders detected — game ended","var(--accent)");
       return;
     }
+  }
   for(const side of ["p","b"])                  // fixed order = identical ents array on both clients
     for(const o of (data[side]||[])){
       if(o.kind==="upgrade"){
@@ -755,10 +1041,25 @@ function resolveOrders(data){
         if(t && t.level<4){ golds[side]-=TOWER_LEVELS[t.level+1].cost; applyUpgrade(side); }
         continue;
       }
+      if(o.kind==="tech"){
+        const cur=techLvl(side,o.card);
+        if(TECH[o.card] && cur<4){ golds[side]-=TECH[o.card][cur+1].cost; applyTech(side,o.card); }
+        continue;
+      }
+      if(o.kind==="sell"){
+        const e=ents.find(t=>!t.dead && t.side===side && t.building && t.kind!=="tower" &&
+          t.gx===o.gx && t.gy===o.gy);
+        if(e){
+          golds[side]+=Math.floor(KINDS[e.kind].cost*SELL_RATE);
+          e.dead=true;
+          puff(e.x,e.y,PAL.gold,6);
+        }
+        continue;
+      }
       if(!KINDS[o.kind]) continue;
       if(KINDS[o.kind].spell){
         if(o.gx>=0&&o.gx<COLS&&o.gy>=0&&o.gy<ROWS){
-          golds[side]-=KINDS[o.kind].cost;
+          magics[side]-=KINDS[o.kind].cost;
           spellsQueued.push({side, x:cellCx(o.gx), y:cellCx(o.gy), kind:o.kind});
         }
       }
@@ -768,6 +1069,7 @@ function resolveOrders(data){
         puff(cellCx(o.gx),cellCx(o.gy), side==="p"?PAL.you:PAL.bot, 8);
       }
     }
+  ents=ents.filter(e=>!e.dead);                 // sold buildings leave the field
   launchSpells();
   phase="battle"; battleT=0;
   refreshUI();
@@ -792,7 +1094,7 @@ function showBanner(text,color){
 function bannerAction(){
   document.getElementById("banner").classList.remove("show");
   if(mode==="online"){ backToMenu(); }
-  else beginMatch({mode:"bot"});
+  else beginMatch({mode:"bot", rt:RT});
 }
 function backToMenu(){
   cleanupNet();
@@ -803,15 +1105,18 @@ function backToMenu(){
 
 function beginMatch(opts){
   mode=opts.mode; mySide=opts.side||"p"; oppSide=mySide==="p"?"b":"p";
+  RT=!!opts.rt; rtT=0;
   const seed = opts.seed!==undefined ? opts.seed : Math.floor(Math.random()*2**31);
   simRand=mulberry32(seed);
   genObstacles(simRand);
   ents=[makeTower("p"),makeTower("b")]; projs=[]; parts=[]; texts=[]; myOrders=[];
   spellsQueued=[]; myMarkers=[]; fireballs=[]; scorches=[];
-  fires=[]; healZones=[]; moneybags=[]; upgradeQueued=false;
+  fires=[]; healZones=[]; moneybags=[]; upgradeQueued=false; pendingTech={};
+  techs={p:{},b:{}};
   spawnBag(simRand); spawnBag(simRand);           // two bags on the fresh battlefield
   golds={p:START_GOLD,b:START_GOLD};
-  turn=1; phase="build"; battleT=0; over=false; selected=null; waitingOrders=false;
+  magics={p:START_MAGIC,b:START_MAGIC};
+  turn=1; phase=RT?"battle":"build"; battleT=0; over=false; selected=null; waitingOrders=false;
   menuOpen=false;
   document.getElementById("menu").classList.add("hidden");
   document.getElementById("banner").classList.remove("show");
@@ -908,12 +1213,20 @@ function genObstacles(rand){
     for(const g of GROVES) if(hyp(x-g.x,y-g.y)<r+30) return false;
     return true;
   };
-  // one mirrored pond pair
+  // one mirrored blue pond pair
   for(let tries=0;tries<80 && PONDS.length<2;tries++){
     const x=rr(3.2*CELL,11.5*CELL), y=rr(1.8*CELL,(ROWS-1.8)*CELL);
     if(!clearOf(x,y,34) || !clearOf(W-x,H-y,34)) continue;
     const v=Math.floor(rand()*3);
     PONDS.push(makePond(x,y,v), makePond(W-x,H-y,v));
+  }
+  // one mirrored PURPLE magic pond pair (small round variant — mana wells go here)
+  for(let tries=0;tries<80 && PONDS.length<4;tries++){
+    const x=rr(2.8*CELL,12*CELL), y=rr(1.6*CELL,(ROWS-1.6)*CELL);
+    if(!clearOf(x,y,30) || !clearOf(W-x,H-y,30)) continue;
+    const a=makePond(x,y,0), b=makePond(W-x,H-y,0);
+    a.magic=b.magic=true;
+    PONDS.push(a,b);
   }
   // three mirrored grove pairs
   for(let pair=0;pair<3;pair++){
@@ -932,13 +1245,14 @@ function genObstacles(rand){
   for(const g of GROVES) OBS_CIRCLES.push({x:g.x,y:g.y,r:13,g});
 }
 
-function pondCell(gx,gy){
+function pondAt(gx,gy){
   const cx=cellCx(gx), cy=cellCx(gy);
   for(const p of PONDS){
-    if(((cx-p.x)/(p.rx+4))**2 + ((cy-p.y)/(p.ry+4))**2 < 1) return true;
+    if(((cx-p.x)/(p.rx+4))**2 + ((cy-p.y)/(p.ry+4))**2 < 1) return p;
   }
-  return false;
+  return null;
 }
+function pondCell(gx,gy){ return !!pondAt(gx,gy); }
 function groveAlive(g){ return g.trees.some(t=>!t.dead); }
 function blockedCell(gx,gy){
   if(pondCell(gx,gy)) return true;
@@ -970,35 +1284,78 @@ function drawPond(p){
   ctx.fillStyle="rgba(38,59,44,0.45)"; tracePond(p,1.24,0); ctx.fill();
   for(const w of p.deco.wet) px(w.x,w.y,w.s,1,w.c);            // damp grass speckle
   // --- mud bank ring ---
-  ctx.fillStyle="#57482f"; tracePond(p,1.12,0); ctx.fill();
-  ctx.fillStyle="#493c28"; tracePond(p,1.04,0); ctx.fill();
+  ctx.fillStyle=p.magic?"#4a3a56":"#57482f"; tracePond(p,1.12,0); ctx.fill();
+  ctx.fillStyle=p.magic?"#3c2f47":"#493c28"; tracePond(p,1.04,0); ctx.fill();
   // --- top-down water: lighter shallows at shore, darkest in the middle ---
-  ctx.fillStyle="#3d7292"; tracePond(p,1,0);   ctx.fill();
-  ctx.fillStyle="#2e5c79"; tracePond(p,.72,0); ctx.fill();
-  ctx.fillStyle="#224a61"; tracePond(p,.42,0); ctx.fill();
+  ctx.fillStyle=p.magic?"#7a4fae":"#3d7292"; tracePond(p,1,0);   ctx.fill();
+  ctx.fillStyle=p.magic?"#5e3a85":"#2e5c79"; tracePond(p,.72,0); ctx.fill();
+  ctx.fillStyle=p.magic?"#43265f":"#224a61"; tracePond(p,.42,0); ctx.fill();
+  // magic ponds exhale drifting sparkle motes
+  if(p.magic && Math.random()<.15)
+    parts.push({x:p.x+rnd(-p.rx,p.rx)*.6, y:p.y+rnd(-p.ry,p.ry)*.6, vx:rnd(-3,3), vy:rnd(-14,-6),
+      life:rnd(.6,1.2), t:0, size:1, color:Math.random()<.5?"#c9a0ff":"#e8d6ff"});
   // animated shimmer
-  ctx.fillStyle="#7fc4de";
+  ctx.fillStyle=p.magic?"#c9a0ff":"#7fc4de";
   for(let i=0;i<4;i++){
     const a=animT*1.2+i*1.7+p.shimSeed;
     const sx=p.x+Math.cos(a)*p.rx*.4, sy=p.y+Math.sin(a*1.3)*p.ry*.38;
     ctx.fillRect(Math.round(sx),Math.round(sy),3,1);
   }
-  // lily pads drifting slightly
-  for(const l of p.deco.lilies){
-    const bx=l.x+Math.sin(animT*.6+l.a)*1;
-    ctx.fillStyle="#3f6b38"; ctx.beginPath(); ctx.arc(bx,l.y,l.r,0,7); ctx.fill();
-    ctx.fillStyle="#2e5229"; px(bx,l.y,l.r,1,"#2e5229");       // pad notch
-    px(bx-1,l.y-1,1,1,"#548a4b");
+  if(p.magic){
+    // arcane spots swirling in the water (no lily pads here)
+    for(const l of p.deco.lilies){
+      const bx=l.x+Math.sin(animT*.6+l.a)*1, by=l.y+Math.cos(animT*.5+l.a)*0.8;
+      ctx.globalAlpha=.7+Math.sin(animT*2+l.a)*.25;
+      ctx.fillStyle="#8a5fc4"; ctx.beginPath(); ctx.arc(bx,by,l.r,0,7); ctx.fill();
+      ctx.fillStyle="#b38ae0"; ctx.beginPath(); ctx.arc(bx,by,l.r*.5,0,7); ctx.fill();
+      px(bx,by-1,1,1,"#e8d6ff");
+      ctx.globalAlpha=1;
+    }
+    // extra faint spots deeper in the water
+    for(let i=0;i<3;i++){
+      const a2=p.shimSeed+i*2.1;
+      const sx=p.x+Math.cos(a2)*p.rx*.35, sy=p.y+Math.sin(a2*1.4)*p.ry*.35;
+      ctx.globalAlpha=.35; ctx.fillStyle="#9b6fd4";
+      ctx.beginPath(); ctx.arc(sx,sy,1.6,0,7); ctx.fill();
+      ctx.globalAlpha=1;
+    }
+  } else {
+    // lily pads drifting slightly (blue ponds only)
+    for(const l of p.deco.lilies){
+      const bx=l.x+Math.sin(animT*.6+l.a)*1;
+      ctx.fillStyle="#3f6b38"; ctx.beginPath(); ctx.arc(bx,l.y,l.r,0,7); ctx.fill();
+      ctx.fillStyle="#2e5229"; px(bx,l.y,l.r,1,"#2e5229");       // pad notch
+      px(bx-1,l.y-1,1,1,"#548a4b");
+    }
   }
-  // shore pebbles + reeds around the rim
+  // shore pebbles + reeds around the rim (violet reeds on magic ponds)
   for(const s of p.deco.pebbles){ px(s.x,s.y,2,1,"#8a8271"); px(s.x,s.y,1,1,"#a09883"); }
   for(const r of p.deco.reeds){
     const sway=Math.sin(animT*2+r.x)*0.7;
-    px(r.x,r.y-r.h,1,r.h,"#2f4630"); px(r.x+sway,r.y-r.h-1,1,2,"#4a6b35");
+    if(p.magic){ px(r.x,r.y-r.h,1,r.h,"#5e4a7a"); px(r.x+sway,r.y-r.h-1,1,2,"#9b7fc4"); }
+    else { px(r.x,r.y-r.h,1,r.h,"#2f4630"); px(r.x+sway,r.y-r.h-1,1,2,"#4a6b35"); }
   }
 }
 function drawGrove(g){ for(const t of g.trees) if(!t.dead) drawTree(t); }
 
+function drawMagicWell(e){
+  const me=e.side==="p", team=me?PAL.you:PAL.bot;
+  const bob=Math.sin(animT*2+e.x)*0.8;
+  // stone well ring
+  ctx.fillStyle="#4a3f5c"; ctx.beginPath(); ctx.arc(e.x,e.y,6,0,7); ctx.fill();
+  ctx.fillStyle="#6b5c85"; ctx.beginPath(); ctx.arc(e.x,e.y,4.6,0,7); ctx.fill();
+  ctx.fillStyle="#2a1d3d"; ctx.beginPath(); ctx.arc(e.x,e.y,3,0,7); ctx.fill();
+  // floating mana orb
+  ctx.globalAlpha=.4; ctx.fillStyle="#c9a0ff";
+  ctx.beginPath(); ctx.arc(e.x,e.y-5+bob,3.4,0,7); ctx.fill();
+  ctx.globalAlpha=1;
+  ctx.fillStyle="#a86ee8"; ctx.beginPath(); ctx.arc(e.x,e.y-5+bob,2,0,7); ctx.fill();
+  px(e.x-1,e.y-6+bob,1,1,"#f0e4ff");
+  px(e.x-1,e.y+5,2,1,team);                       // team band
+  if(Math.random()<.06)                            // rising motes
+    parts.push({x:e.x+rnd(-3,3),y:e.y-4,vx:0,vy:rnd(-14,-8),life:rnd(.4,.8),t:0,size:1,color:"#c9a0ff"});
+  if(e.hp<e.maxHp) drawHpBar(e,e.x-6,e.y-16,12);
+}
 function drawDuck(e){
   const me=e.side==="p", team=me?PAL.you:PAL.bot;
   const bob=Math.sin(animT*2.4+e.x)*1.2;
@@ -1029,9 +1386,9 @@ function drawMoneybags(){
     px(b.x-3,y-1,6,5,"#a5824a");
     px(b.x-2,y-4,4,3,"#8a6b3a");        // neck
     px(b.x-1,y-5,2,1,"#5c4726");        // tie
-    ctx.fillStyle=PAL.gold; ctx.font="bold 6px monospace"; ctx.textAlign="center";
-    ctx.fillText("$",b.x,y+3.5);
-    if(Math.sin(animT*4+b.y)>0.85) px(b.x+rnd(-4,4),y+rnd(-4,2),1,1,"#fff7d6");  // twinkle
+    ctx.fillStyle="#4fd35c"; ctx.font="bold 6px monospace"; ctx.textAlign="center";
+    ctx.fillText("$",b.x,y+3.5);                                                  // green money logo
+    if(Math.sin(animT*4+b.y)>0.85) px(b.x+rnd(-4,4),y+rnd(-4,2),1,1,"#8dffa0");   // green twinkle
   }
 }
 function drawFires(){
@@ -1052,17 +1409,17 @@ function drawFires(){
   }
 }
 function drawHealZones(){
-  const k=KINDS.heal;
   for(const z of healZones){
+    const zr=z.r||KINDS.heal.radius;
     const a=Math.min(1,(z.life-z.t)/1)* .9;
     const pulse=1+Math.sin(animT*4)*.05;
     ctx.globalAlpha=.14*a;
     ctx.fillStyle="#6ee77a";
-    ctx.beginPath(); ctx.arc(z.x,z.y,k.radius*pulse,0,7); ctx.fill();
+    ctx.beginPath(); ctx.arc(z.x,z.y,zr*pulse,0,7); ctx.fill();
     ctx.globalAlpha=.7*a;
     ctx.setLineDash([3,3]); ctx.lineDashOffset=-animT*8;
     ctx.strokeStyle="#6ee77a"; ctx.lineWidth=1;
-    ctx.beginPath(); ctx.arc(z.x,z.y,k.radius*pulse,0,7); ctx.stroke();
+    ctx.beginPath(); ctx.arc(z.x,z.y,zr*pulse,0,7); ctx.stroke();
     ctx.setLineDash([]);
     ctx.globalAlpha=1;
   }
@@ -1177,10 +1534,12 @@ function drawTowerSpr(e){
   const wave=Math.sin(animT*5+(me?0:2))*1.5;
   px(cx,cy-11,1,10,PAL.stoneDark);
   px(cx+1,cy-11,6+wave,3,lite);
-  // level pips: one gold stud per level above 1
+  // golden rings: one encircling the tower per upgrade level
   for(let i=0;i<(e.level||1)-1;i++){
-    px(cx-8+i*5, cy+R-4, 3,3, PAL.gold);
-    px(cx-8+i*5, cy+R-4, 1,1, "#fff7d6");
+    ctx.globalAlpha=.55+Math.sin(animT*3+i*1.5)*.2;
+    ctx.strokeStyle=PAL.gold; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.arc(cx,cy,R+2.5+i*3,0,7); ctx.stroke();
+    ctx.globalAlpha=1;
   }
   drawHpBar(e, cx-13, cy-R-11, 26);
 }
@@ -1268,11 +1627,29 @@ function drawHpBar(e,x,y,w){
 }
 
 function drawGhost(){
-  if(!selected||!hover||phase!=="build"||menuOpen||waitingOrders) return;
+  if(!selected||!hover||!canBuild()) return;
+  if(selected==="sell"){
+    const e=sellableAt(mySide,hover.gx,hover.gy);
+    if(e){
+      const w=(e.gw||1)*CELL, h=(e.gh||1)*CELL;
+      ctx.globalAlpha=.35; px(e.gx*CELL,e.gy*CELL,w,h,PAL.gold); ctx.globalAlpha=.9;
+      ctx.strokeStyle=PAL.gold; ctx.lineWidth=1;
+      ctx.strokeRect(e.gx*CELL+.5,e.gy*CELL+.5,w-1,h-1);
+      ctx.font="bold 8px monospace"; ctx.textAlign="center"; ctx.fillStyle=PAL.gold;
+      ctx.fillText("+"+Math.floor(KINDS[e.kind].cost*SELL_RATE), e.x, e.gy*CELL-3);
+      ctx.globalAlpha=1;
+    } else {
+      ctx.globalAlpha=.3;
+      px(hover.gx*CELL,hover.gy*CELL,CELL,CELL,"#ff6b6b");
+      ctx.globalAlpha=1;
+    }
+    return;
+  }
   const k=KINDS[selected];
-  const ok = canPlace(hover.gx,hover.gy) && golds[mySide]>=k.cost;
+  const ok = canPlace(hover.gx,hover.gy) && (k.spell?magics[mySide]:golds[mySide])>=k.cost;
   if(k.spell){
-    // effect-radius preview
+    // effect-radius preview (uses my tech level)
+    const rr=tstat(mySide,selected,"radius");
     const x=cellCx(hover.gx), y=cellCx(hover.gy);
     const cols={heal:["#6ee77a","#a8f5b4"], shield:["#7db4ff","#bcd8ff"], fireball:["#ff9c40","#ffd75e"]};
     const c=cols[selected]||cols.fireball;
@@ -1280,10 +1657,10 @@ function drawGhost(){
     const cEdge= !ok?"#ff6b6b" : c[1];
     ctx.globalAlpha=.22;
     ctx.fillStyle=cFill;
-    ctx.beginPath(); ctx.arc(x,y,k.radius,0,7); ctx.fill();
+    ctx.beginPath(); ctx.arc(x,y,rr,0,7); ctx.fill();
     ctx.globalAlpha=.8;
     ctx.strokeStyle=cEdge; ctx.lineWidth=1;
-    ctx.beginPath(); ctx.arc(x,y,k.radius,0,7); ctx.stroke();
+    ctx.beginPath(); ctx.arc(x,y,rr,0,7); ctx.stroke();
     px(x-1,y-1,3,3,cEdge);
     ctx.globalAlpha=1;
     return;
@@ -1295,13 +1672,13 @@ function drawGhost(){
 function drawSpellMarkers(){
   if(phase!=="build" && !waitingOrders && myMarkers.length===0) return;
   for(const m of myMarkers){
-    const k=KINDS[m.kind]||KINDS.fireball;
+    const rr=tstat(mySide,m.kind,"radius")||KINDS.fireball.radius;
     const cols={heal:["#6ee77a","#d9ffe0"], shield:["#7db4ff","#bcd8ff"], fireball:["#ff9c40","#ffd75e"]};
     const [c1,c2]=cols[m.kind]||cols.fireball;
     const pulse=1+Math.sin(animT*5)*.06;
     ctx.setLineDash([5,4]); ctx.lineDashOffset=-animT*14;
     ctx.strokeStyle=c1; ctx.lineWidth=1;
-    ctx.beginPath(); ctx.arc(m.x,m.y,k.radius*pulse,0,7); ctx.stroke();
+    ctx.beginPath(); ctx.arc(m.x,m.y,rr*pulse,0,7); ctx.stroke();
     ctx.setLineDash([]);
     px(m.x-3,m.y,7,1,c1); px(m.x,m.y-3,1,7,c1);   // crosshair
     px(m.x-1,m.y-1,3,3,c2);
@@ -1359,12 +1736,15 @@ function render(){
   // sort by y for pseudo-depth
   const sorted=[...ents].sort((a,b)=>a.y-b.y);
   for(const e of sorted){
+    if(e.selling) ctx.globalAlpha=.45;            // sold this turn: ghosted until resolve
     if(e.kind==="tower") drawTowerSpr(e);
     else if(e.kind==="wall") drawWall(e);
     else if(e.kind==="harvester") drawHarvester(e);
     else if(e.kind==="turret") drawTurret(e);
     else if(e.kind==="duck") drawDuck(e);
+    else if(e.kind==="magicwell") drawMagicWell(e);
     else drawTroop(e);
+    if(e.selling) ctx.globalAlpha=1;
   }
   drawFires();
   drawStatusFx();
@@ -1469,6 +1849,56 @@ function setMenuStatus(status, code){
   document.getElementById("menuCode").textContent=code||"";
 }
 function setMsgText(t){ document.getElementById("msg").textContent=t; }
+
+// ============================== PATCH NOTES ==============================
+const PATCH_NOTES=[
+  ["v23",["Blitz HUD now says \"/6s\" and \"Tick\" instead of \"/turn\" and \"Turn\"."]],
+  ["v22",["⚡ NEW GAME MODE: Blitz — real-time, no turns! Build anytime, income every 6s, spells fire instantly. Vs bot (online stays turn-based).",
+          "💰 Sell button: click your buildings to sell them for 50% of their cost.",
+          "Duck water now SPLASHES: soaks (and stings) every enemy troop near the impact.",
+          "Troop limit reworked: max 3 troops ALIVE per side, total — losses free up slots.",
+          "The build bar is hidden while you're on the menu."]],
+  ["v21",["The duck now deals 0.1 damage per squirt. Fear it."]],
+  ["v20",["Tower range increased at every level (85/95/105/118, was 78/88/98/112) — archers can no longer snipe a tower without being shot back at equal tech."]],
+  ["v19",["Patch notes! Click the version number on the menu to read this history.",
+          "Harvesters now EXPLODE on death: 12 dmg to all enemies within 2 tiles. Raid responsibly.",
+          "Safety: death effects (bounty/explosion) can never trigger twice."]],
+  ["v18",["Harvester death explosion added (see v19 — shipped together)."]],
+  ["v17",["Towers now fire at up to 3 enemy troops per volley. Swarms beware.",
+          "Soldier base HP lowered 14 → 10 (upgrades now 10/13/16/20)."]],
+  ["v16",["Much smarter bot: builds wall lines and turret nests to protect its tower, attacks your weakest lane with brute-led waves, value-targets fireballs at your economy, shields & heals its pushes, researches tech with real priorities."]],
+  ["v15",["Fixed: selecting a card sometimes disabled unrelated cards (walls, harvesters, turrets…) until the next refresh. Cards now enable/disable correctly."]],
+  ["v14",["Troop limit: max 3 troops placed per build phase (buildings & spells unlimited). Live counter in the status bar."]],
+  ["v13",["Troop targeting priority is now: enemy troops → money bags → enemy buildings. Bags are looted, not attacked."]],
+  ["v12",["Build bar moved below the battlefield — nothing covers the action anymore.",
+          "Card tooltips repositioned so they never hide the upgrade buttons.",
+          "Mana Well now matches the Harvester: 5 gold, +3/turn, same upgrade track, and killers loot 25% of its lifetime magic.",
+          "Magic ponds restyled: drifting purple spots and violet reeds instead of lily pads."]],
+  ["v11",["MAGIC! Spells now cost 🔮 magic instead of gold.",
+          "New purple magic ponds spawn on every map — build the new Mana Well on them to harvest magic.",
+          "Ducks are now blue-water-only.",
+          "Shield bubbles wear off at the end of the turn.",
+          "Towers show a golden ring for every upgrade level."]],
+  ["v10",["Upgrades for Archer (range/HP/dmg/rate), Brute (speed/rate), Fireball (+dmg, +radius), Heal (+radius, +HP/s) and Shield (+radius).",
+          "Money bags now spawn 50% of turns and sport a green $."]],
+  ["v9", ["Card upgrades (L1–L4) for Wall, Harvester, Turret, Duck and Soldier — the ⬆ button on each card. Upgrades buff units already on the field."]],
+  ["v8", ["The big one: 🦆 Duck (water tower that slows), burning trees (fireballs ignite groves → fires deal 1 HP/s), 💰 money bags troops can loot, 🫧 Shield spell, Heal reworked to a 6s zone, hover tooltips, tower HP 200 and tower upgrades L1–L4."]],
+  ["v7", ["💚 Heal spell: instant zone healing your troops, harvesters & walls."]],
+  ["v6", ["Harvester bounty: killing one loots 25% of everything it earned in its lifetime."]],
+  ["v5", ["🔥 Fireball spell: launches from your tower, 2-tile blast, place it anywhere."]],
+  ["v4", ["Online play hardened: connection handshake fixed (joins actually work), retry loop, relay fallback for strict networks, and a guard against joining your own room from the same window."]],
+  ["v3", ["Serverless online multiplayer via room codes — host on GitHub Pages, no server needed.",
+          "Random battlefield every match: organic ponds (3 shapes), 4 tree variants, textured grass."]],
+  ["v2", ["Forest battlefield, top-down round towers, walls that connect, shape-coded troops (● soldier ▲ archer ■ brute), readable HP bars, target-leading marksmanship."]],
+  ["v1", ["Tower Duel is born: turn-based duel, secret build phases, 60fps pixel battles, gold economy, and a bot to beat."]],
+];
+function showNotes(){
+  const body=document.getElementById("notesBody");
+  body.innerHTML=PATCH_NOTES.map(([v,items])=>
+    `<h3>${v}</h3><ul>${items.map(i=>`<li>${i}</li>`).join("")}</ul>`).join("");
+  document.getElementById("notes").classList.add("show");
+}
+function hideNotes(){ document.getElementById("notes").classList.remove("show"); }
 function peerReady(){
   if(typeof Peer==="undefined"){
     setMenuStatus("Online play unavailable — couldn't load PeerJS (check your connection).","");
@@ -1527,6 +1957,7 @@ function checkReports(){
 }
 
 function menuBot(){ cleanupNet(); beginMatch({mode:"bot"}); }
+function menuBlitz(){ cleanupNet(); beginMatch({mode:"bot", rt:true}); }
 function menuCreate(){
   if(!peerReady()) return;
   cleanupNet();
@@ -1599,14 +2030,53 @@ const toolbar=document.getElementById("toolbar");
 const tipEl=document.getElementById("tip");
 function showTip(html){ tipEl.innerHTML=html; tipEl.style.display="block"; }
 function hideTip(){ tipEl.style.display="none"; }
+function techLine(card,lvl){
+  const t=TECH[card][lvl], names={hp:"HP",inc:"income/turn",dmg:"dmg",range:"range",cd:"s/atk",slow:"slow(s)",
+    spd:"speed",hps:"HP/s",dmgBuilding:"bldg dmg",radius:"radius"};
+  return Object.entries(t).filter(([f])=>f!=="cost").map(([f,v])=>`${names[f]||f} ${v}`).join(" · ");
+}
+function tipFor(key){
+  const k=KINDS[key];
+  let html=`<b>${k.icon} ${k.label} — ${k.spell?"🔮":"💰"}${k.cost}</b><br>${TIPS[key]||""}`;
+  if(TECH[key]){
+    const lvl=techLvl(mySide,key)+(pendingTech[key]||0);
+    html+=`<br><b>L${lvl}:</b> ${techLine(key,lvl)}`;
+    if(lvl<4) html+=`<br><b>⬆ L${lvl+1} (💰${TECH[key][lvl+1].cost}):</b> ${techLine(key,lvl+1)}`;
+    else html+=`<br><b>MAX LEVEL</b>`;
+  }
+  return html;
+}
 for(const [key,k] of Object.entries(KINDS)){
-  const b=document.createElement("button");
+  const b=document.createElement("div");
   b.className="tool"; b.id="tool_"+key;
-  b.innerHTML=`<span class="ic">${k.icon}</span><span class="nm">${k.label}</span><span class="cs">💰${k.cost}</span>`;
-  b.onclick=()=>{ selected = selected===key?null:key; refreshUI(); };
-  b.onmouseenter=()=>showTip(`<b>${k.icon} ${k.label} — 💰${k.cost}</b><br>${TIPS[key]||""}`);
+  const cur=k.spell?"🔮":"💰";
+  b.innerHTML=`<span class="ic">${k.icon}</span><span class="nm">${k.label} <span class="lvl" id="lvl_${key}"></span></span><span class="cs">${cur}${k.cost}</span>`;
+  b.onclick=ev=>{
+    if(ev.target.classList.contains("up")) return;
+    if(b.classList.contains("disabled")) return;
+    selected = selected===key?null:key; refreshUI();
+  };
+  b.onmouseenter=()=>showTip(tipFor(key));
   b.onmouseleave=hideTip;
+  if(TECH[key]){
+    const u=document.createElement("button");
+    u.className="up"; u.id="up_"+key; u.textContent="⬆";
+    u.onclick=ev=>{ ev.stopPropagation(); buyTech(key); showTip(tipFor(key)); };
+    b.appendChild(u);
+  }
   toolbar.appendChild(b);
+}
+function buyTech(card){
+  if(!canBuild()) return;
+  const eff=techLvl(mySide,card)+(pendingTech[card]||0);
+  if(eff>=4) return;
+  const cost=TECH[card][eff+1].cost;
+  if(golds[mySide]<cost) return;
+  golds[mySide]-=cost;
+  if(mode==="online"){ pendingTech[card]=(pendingTech[card]||0)+1; myOrders.push({kind:"tech",card}); }
+  else applyTech(mySide,card);
+  sfx("place");
+  refreshUI();
 }
 // tower upgrade button
 const upBtn=document.createElement("button");
@@ -1618,12 +2088,12 @@ upBtn.onmouseenter=()=>{
   const cur=TOWER_LEVELS[t.level], nx=TOWER_LEVELS[t.level+1];
   showTip(`<b>⬆️ Tower L${t.level} → L${t.level+1} — 💰${nx.cost}</b><br>`+
     `dmg ${cur.dmg}→${nx.dmg} · atk/s ${(1/cur.cd).toFixed(1)}→${(1/nx.cd).toFixed(1)} · `+
-    `range ${cur.range}→${nx.range} · HP ${cur.hp}→${nx.hp}`);
+    `range ${cur.range}→${nx.range} · HP ${cur.hp}→${nx.hp}<br>Fires at up to 3 targets per volley.`);
 };
 upBtn.onmouseleave=hideTip;
 toolbar.appendChild(upBtn);
 function buyUpgrade(){
-  if(phase!=="build"||menuOpen||waitingOrders||upgradeQueued) return;
+  if(!canBuild()||upgradeQueued) return;
   const t=towerOf(mySide);
   if(!t||t.level>=4) return;
   const cost=TOWER_LEVELS[t.level+1].cost;
@@ -1634,6 +2104,14 @@ function buyUpgrade(){
   sfx("place");
   refreshUI();
 }
+// sell mode button
+const sellBtn=document.createElement("div");
+sellBtn.className="tool"; sellBtn.id="tool_sell";
+sellBtn.innerHTML=`<span class="ic">💰</span><span class="nm">Sell</span><span class="cs">+50%</span>`;
+sellBtn.onclick=()=>{ if(sellBtn.classList.contains("disabled"))return; selected=selected==="sell"?null:"sell"; refreshUI(); };
+sellBtn.onmouseenter=()=>showTip(`<b>💰 Sell</b><br>Click one of your buildings to sell it for 50% of its gold cost. The tower is not for sale.`);
+sellBtn.onmouseleave=hideTip;
+toolbar.appendChild(sellBtn);
 const fightBtn=document.createElement("button");
 fightBtn.id="fight"; fightBtn.textContent="⚔️ FIGHT!";
 fightBtn.onclick=startBattle;
@@ -1641,36 +2119,64 @@ toolbar.appendChild(fightBtn);
 
 function refreshUI(){
   document.getElementById("gold").textContent=golds[mySide];
+  document.getElementById("magic").textContent=magics[mySide];
+  document.getElementById("magicIncLbl").textContent=magicIncome(mySide);
   document.getElementById("turnNo").textContent=turn;
   document.getElementById("incomeLbl").textContent=income(mySide);
+  const unit = RT ? "/"+RT_TICK+"s" : "/turn";
+  document.getElementById("incomeUnit").textContent=unit;
+  document.getElementById("magicIncUnit").textContent=unit;
+  document.getElementById("turnWord").textContent = RT ? "Tick" : "Turn";
   document.getElementById("pHp").textContent=Math.max(0,towerHp("p"));
   document.getElementById("bHp").textContent=Math.max(0,towerHp("b"));
   document.getElementById("pLv").textContent=(towerOf("p")||{level:1}).level;
   document.getElementById("bLv").textContent=(towerOf("b")||{level:1}).level;
+  const building=canBuild();
   for(const key of Object.keys(KINDS)){
     const b=document.getElementById("tool_"+key);
-    b.disabled = phase!=="build" || waitingOrders || golds[mySide]<KINDS[key].cost;
+    const wallet=KINDS[key].spell?magics[mySide]:golds[mySide];
+    const troopCap=!!KINDS[key].troop && troopCount(mySide)>=TROOP_LIMIT;
+    // NB: force arg must be a real boolean — classList.toggle(cls, undefined) FLIPS the class!
+    b.classList.toggle("disabled", !!(!building || wallet<KINDS[key].cost || troopCap));
     b.classList.toggle("selected",selected===key);
+    if(TECH[key]){
+      const eff=techLvl(mySide,key)+(pendingTech[key]||0);
+      const badge=document.getElementById("lvl_"+key);
+      badge.textContent = eff>1 ? "L"+eff : "";
+      const u=document.getElementById("up_"+key);
+      if(eff>=4){ u.textContent="MAX"; u.disabled=true; }
+      else {
+        const c=TECH[key][eff+1].cost;
+        u.textContent="⬆"+c;
+        u.disabled = !building || golds[mySide]<c;
+      }
+    }
   }
+  sellBtn.classList.toggle("disabled", !building);
+  sellBtn.classList.toggle("selected", selected==="sell");
   {
     const t=towerOf(mySide), lvl=t?t.level:1;
     if(lvl>=4){ upBtn.innerHTML=`<span class="ic">⬆️</span><span class="nm">Tower MAX</span><span class="cs">L4</span>`; upBtn.disabled=true; }
     else {
       const cost=TOWER_LEVELS[lvl+1].cost;
       upBtn.innerHTML=`<span class="ic">⬆️</span><span class="nm">${upgradeQueued?"Queued…":"Tower L"+(lvl+1)}</span><span class="cs">💰${cost}</span>`;
-      upBtn.disabled = phase!=="build" || waitingOrders || upgradeQueued || golds[mySide]<cost;
+      upBtn.disabled = !building || upgradeQueued || golds[mySide]<cost;
     }
   }
+  fightBtn.style.display = RT ? "none" : "";
   fightBtn.textContent = mode==="online" ? (waitingOrders?"⏳ Waiting…":"✅ READY") : "⚔️ FIGHT!";
   fightBtn.disabled = phase!=="build" || waitingOrders;
-  toolbar.classList.toggle("away", phase!=="build" && !menuOpen);
+  toolbar.style.display = menuOpen ? "none" : "flex";
+  document.getElementById("msg").style.display = menuOpen ? "none" : "";
+  toolbar.classList.toggle("away", !building);
   const msg=document.getElementById("msg");
   const sideTxt = mySide==="p" ? "left 🔵" : "right 🔴";
   if(waitingOrders) msg.textContent="⏳ Orders locked in — waiting for your opponent…";
-  else if(phase==="battle") msg.textContent="⚔️ Battle in progress…";
-  else if(selected && KINDS[selected].spell) msg.textContent=`Placing ${KINDS[selected].label} — click ANYWHERE on the map. It launches from your tower when the battle starts.`;
+  else if(phase==="battle" && !RT) msg.textContent="⚔️ Battle in progress…";
+  else if(selected==="sell") msg.textContent="💰 SELL MODE — click one of your buildings to sell it for half price. Right-click to cancel.";
+  else if(selected && KINDS[selected].spell) msg.textContent=`Placing ${KINDS[selected].label} — click ANYWHERE on the map. ${RT?"It fires immediately!":"It launches when the battle starts."}`;
   else if(selected) msg.textContent=`Placing ${KINDS[selected].label} — click a tile on your (${sideTxt}) side. Right-click to cancel.`;
-  else msg.innerHTML=`You are <b>${sideTxt}</b>. Select a building or troop, then click your side to place it. <kbd>Esc</kbd>/right-click to deselect.`;
+  else msg.innerHTML=`You are <b>${sideTxt}</b>${RT?" · ⚡ BLITZ — build anytime, income every "+RT_TICK+"s":""}. Troops alive ${troopCount(mySide)}/${TROOP_LIMIT}. <kbd>Esc</kbd>/right-click to deselect.`;
 }
 
 function canvasPos(ev){
@@ -1682,8 +2188,9 @@ cv.addEventListener("mousemove",ev=>{ hover=canvasPos(ev); });
 cv.addEventListener("mouseleave",()=>{ hover=null; });
 cv.addEventListener("click",ev=>{
   ac(); // unlock audio
-  if(!selected||phase!=="build"||menuOpen||waitingOrders) return;
+  if(!selected||!canBuild()) return;
   const p=canvasPos(ev);
+  if(selected==="sell"){ sellAt(p.gx,p.gy); return; }
   place(selected,p.gx,p.gy);
 });
 cv.addEventListener("contextmenu",ev=>{ ev.preventDefault(); selected=null; refreshUI(); });

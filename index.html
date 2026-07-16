@@ -109,7 +109,7 @@
   <div id="tip"></div>
   <div id="banner"><div class="big" id="bannerText"></div><button onclick="bannerAction()">↺ Play Again</button></div>
   <div id="menu">
-    <h2>🏰 TOWER DUEL <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">v25</span></h2>
+    <h2>🏰 TOWER DUEL <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">v26</span></h2>
     <div id="sceneSel">
       <button data-scene="forest" class="on">🌲 Forest</button>
       <button data-scene="beach">🏖️ Beach</button>
@@ -901,6 +901,7 @@ function updateBattle(dt){
       const range=tstat(e.side,e.kind,"range");
       const n=acquireTarget(e,k.aggro);           // only reacts inside its detection radius
       if(n){
+        if(e.kind==="archer") e.aim=Math.atan2(n.t.y-e.y, n.t.x-e.x);   // face what it's shooting
         if(n.bag || n.d>range){                   // bags are walked to (picked up on contact), never attacked
           const d=dist(e,n.t)||1;
           e.x+=(n.t.x-e.x)/d*spd*dt;
@@ -922,6 +923,7 @@ function updateBattle(dt){
         const tower=ents.find(o=>o.kind==="tower" && o.side!==e.side && !o.dead);
         let tx=e.x+(e.side==="p"?100:-100), ty=e.y;
         if(tower && Math.abs(tower.x-e.x)<70){ tx=tower.x; ty=tower.y; }
+        if(e.kind==="archer") e.aim=Math.atan2(ty-e.y, tx-e.x);         // face the march direction
         const d=hyp(tx-e.x,ty-e.y)||1;
         e.x+=(tx-e.x)/d*spd*dt;
         e.y+=(ty-e.y)/d*spd*dt;
@@ -1920,12 +1922,14 @@ function drawTroop(e){
     px(x-1,y-1,1,1,PAL.white);
     if(e.hp<e.maxHp) drawHpBar(e,x-4,y-13,8);
   }
-  else if(e.kind==="archer"){                    // ▲ triangle (points toward enemy)
-    const dir = me?1:-1;
+  else if(e.kind==="archer"){                    // ▲ triangle (points where it's aiming)
+    const a = e.aim!==undefined ? e.aim : (me?0:Math.PI);
+    ctx.save(); ctx.translate(x,y); ctx.rotate(a);
     ctx.fillStyle=dark; ctx.beginPath();
-    ctx.moveTo(x+5*dir,y); ctx.lineTo(x-4*dir,y-5); ctx.lineTo(x-4*dir,y+5); ctx.closePath(); ctx.fill();
+    ctx.moveTo(5,0); ctx.lineTo(-4,-5); ctx.lineTo(-4,5); ctx.closePath(); ctx.fill();
     ctx.fillStyle=body; ctx.beginPath();
-    ctx.moveTo(x+3*dir,y); ctx.lineTo(x-2.5*dir,y-3); ctx.lineTo(x-2.5*dir,y+3); ctx.closePath(); ctx.fill();
+    ctx.moveTo(3,0); ctx.lineTo(-2.5,-3); ctx.lineTo(-2.5,3); ctx.closePath(); ctx.fill();
+    ctx.restore();
     if(e.hp<e.maxHp) drawHpBar(e,x-4,y-13,8);
   }
   else {                                         // ■ square (brute)
@@ -1953,6 +1957,34 @@ function drawHpBar(e,x,y,w){
   if(fw>1) px(x,y,fw,1,"rgba(255,255,255,.35)");
 }
 
+// range ring shown while the cursor is over a projectile shooter (tower / turret / archer)
+function rangeOf(e){
+  if(e.kind==="tower")  return TOWER_LEVELS[e.level||1].range;
+  if(e.kind==="turret") return tstat(e.side,"turret","range");
+  if(e.kind==="archer") return tstat(e.side,"archer","range");
+  return 0;
+}
+function shooterUnderCursor(){
+  if(!hover) return null;
+  let best=null, bd=1e9;
+  for(const e of ents){
+    if(e.dead || !rangeOf(e)) continue;
+    const d=hyp(hover.x-e.x, hover.y-e.y);
+    if(d<=bodyR(e)+3 && d<bd){ bd=d; best=e; }
+  }
+  return best;
+}
+function drawRangeHover(){
+  const e=shooterUnderCursor();
+  if(!e) return;
+  const r=rangeOf(e), col=e.side==="p"?PAL.you:PAL.bot;
+  ctx.globalAlpha=.10; ctx.fillStyle=col;
+  ctx.beginPath(); ctx.arc(e.x,e.y,r,0,7); ctx.fill();
+  ctx.globalAlpha=.75; ctx.strokeStyle=col; ctx.lineWidth=1;
+  ctx.setLineDash([4,3]); ctx.lineDashOffset=-animT*10;
+  ctx.beginPath(); ctx.arc(e.x,e.y,r,0,7); ctx.stroke();
+  ctx.setLineDash([]); ctx.globalAlpha=1;
+}
 function drawGhost(){
   if(!selected||!hover||!canBuild()) return;
   if(selected==="sell"){
@@ -2076,6 +2108,7 @@ function render(){
   }
   drawFires();
   drawStatusFx();
+  drawRangeHover();
   // grove canopies sit above units for depth
   for(const g of GROVES) drawGrove(g);
   drawFireballs();
@@ -2189,6 +2222,8 @@ function setMsgText(t){ document.getElementById("msg").textContent=t; }
 
 // ============================== PATCH NOTES ==============================
     const PATCH_NOTES = [
+  ["v26",["🏹 The archer now points in the direction it's aiming, rather than always facing forward.",
+          "🎯 Hover over a tower, turret, or archer to see a ring showing its attack range."]],
   ["v25",["🪤 NEW UNIT: Spikes — a single-use trap (💰7). Place it on your side; when an enemy troop steps within ~1 tile, hidden spikes erupt for 15 damage to every foe in the blast, then it's spent. Doesn't block movement, and the enemy can't target it.",
           "Spikes upgrade like everything else: L1→L4 raises damage (15/20/26/33) and blast radius.",
           "🔊 Sound volume slider added to the menu — your setting is remembered between sessions.",

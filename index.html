@@ -76,6 +76,12 @@
   #soundRow{display:flex;align-items:center;gap:8px;color:var(--dim);font-size:.85em;margin-bottom:2px}
   #soundRow input[type=range]{width:150px;accent-color:var(--accent);cursor:pointer}
   #volPct{min-width:34px;text-align:right;color:var(--text)}
+  #rangeBar{display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;
+    margin-top:8px;width:min(96vw,940px);color:var(--dim);font-size:.85em}
+  #rangeBar button{background:var(--panel2);border:2px solid #333a5c;border-radius:8px;color:var(--text);
+    font-family:inherit;font-size:.85em;padding:4px 12px;cursor:pointer;opacity:.7;transition:all .1s}
+  #rangeBar button:hover{opacity:1;border-color:var(--accent)}
+  #rangeBar button.on{opacity:1;border-color:var(--accent);background:#3a3417}
   #notes{position:absolute;inset:0;background:rgba(10,12,22,.96);border-radius:8px;z-index:7;
     display:none;flex-direction:column;padding:14px 18px}
   #notes.show{display:flex}
@@ -109,7 +115,7 @@
   <div id="tip"></div>
   <div id="banner"><div class="big" id="bannerText"></div><button onclick="bannerAction()">↺ Play Again</button></div>
   <div id="menu">
-    <h2>🏰 TOWER DUEL <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">v26</span></h2>
+    <h2>🏰 TOWER DUEL <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">v27</span></h2>
     <div id="sceneSel">
       <button data-scene="forest" class="on">🌲 Forest</button>
       <button data-scene="beach">🏖️ Beach</button>
@@ -133,6 +139,12 @@
   </div>
 </div>
 <div id="toolbar"></div>
+<div id="rangeBar">
+  <span>👁 Show ranges:</span>
+  <button data-r="p">🔵 Blue</button>
+  <button data-r="b">🔴 Red</button>
+  <button data-r="both">⚔ Both</button>
+</div>
 <div id="msg">Select a building or troop, then click your (left) side to place it. <kbd>Esc</kbd>/right-click to deselect.</div>
 
 <script>
@@ -1964,6 +1976,19 @@ function rangeOf(e){
   if(e.kind==="archer") return tstat(e.side,"archer","range");
   return 0;
 }
+let showRanges=null;   // null | "p" (blue) | "b" (red) | "both" — toggled by the range bar
+function drawAllRanges(){
+  if(!showRanges) return;
+  for(const e of ents){
+    if(e.dead || !rangeOf(e)) continue;
+    if(showRanges!=="both" && e.side!==showRanges) continue;
+    const col=e.side==="p"?PAL.you:PAL.bot;
+    ctx.globalAlpha=.5; ctx.strokeStyle=col; ctx.lineWidth=1;
+    ctx.setLineDash([3,3]); ctx.lineDashOffset=-animT*8;
+    ctx.beginPath(); ctx.arc(e.x,e.y,rangeOf(e),0,7); ctx.stroke();
+    ctx.setLineDash([]); ctx.globalAlpha=1;
+  }
+}
 function shooterUnderCursor(){
   if(!hover) return null;
   let best=null, bd=1e9;
@@ -2108,6 +2133,7 @@ function render(){
   }
   drawFires();
   drawStatusFx();
+  drawAllRanges();
   drawRangeHover();
   // grove canopies sit above units for depth
   for(const g of GROVES) drawGrove(g);
@@ -2222,6 +2248,7 @@ function setMsgText(t){ document.getElementById("msg").textContent=t; }
 
 // ============================== PATCH NOTES ==============================
     const PATCH_NOTES = [
+  ["v27",["👁 \"Show ranges\" toggle below the battlefield: display attack-range rings for the 🔵 Blue side, the 🔴 Red side, or both at once."]],
   ["v26",["🏹 The archer now points in the direction it's aiming, rather than always facing forward.",
           "🎯 Hover over a tower, turret, or archer to see a ring showing its attack range."]],
   ["v25",["🪤 NEW UNIT: Spikes — a single-use trap (💰7). Place it on your side; when an enemy troop steps within ~1 tile, hidden spikes erupt for 15 damage to every foe in the blast, then it's spent. Doesn't block movement, and the enemy can't target it.",
@@ -2548,6 +2575,7 @@ function refreshUI(){
   fightBtn.textContent = mode==="online" ? (waitingOrders?"⏳ Waiting…":"✅ READY") : "⚔️ FIGHT!";
   fightBtn.disabled = phase!=="build" || waitingOrders;
   toolbar.style.display = menuOpen ? "none" : "flex";
+  document.getElementById("rangeBar").style.display = menuOpen ? "none" : "flex";
   document.getElementById("msg").style.display = menuOpen ? "none" : "";
   toolbar.classList.toggle("away", !building);
   const msg=document.getElementById("msg");
@@ -2580,6 +2608,14 @@ window.addEventListener("keydown",ev=>{ if(ev.key==="Escape"){ selected=null; re
 // scene picker: swap the battlefield theme (purely visual)
 document.querySelectorAll("#sceneSel button").forEach(b=>{
   b.onclick=()=>applyScene(b.dataset.scene);
+});
+
+// range bar: persistently show attack ranges for one or both sides
+function updateRangeBar(){
+  document.querySelectorAll("#rangeBar button").forEach(b=>b.classList.toggle("on", showRanges===b.dataset.r));
+}
+document.querySelectorAll("#rangeBar button").forEach(b=>{
+  b.onclick=()=>{ showRanges = showRanges===b.dataset.r ? null : b.dataset.r; updateRangeBar(); };
 });
 
 // sound slider: master volume, remembered across sessions

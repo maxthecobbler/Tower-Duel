@@ -159,7 +159,7 @@
     </div>
   </div>
   <div id="menu">
-    <h2>🏰 TOWER DUEL <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">3.16.11.5</span></h2>
+    <h2>🏰 TOWER DUEL <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">3.16.12.5</span></h2>
     <div id="sceneSel">
       <button data-scene="forest" class="on">🌲 Forest</button>
       <button data-scene="beach">🏖️ Beach</button>
@@ -243,7 +243,7 @@ const KINDS = {
   harvester:{label:"Harvester",icon:"🌾", cost:5,  hp:20,  building:true},
   turret:   {label:"Turret",   icon:"🗼", cost:8,  hp:30,  building:true, range:90, dmg:5, cd:1.4, aoe:22},
   spikes:   {label:"Spikes",   icon:"🪤", cost:7,  hp:1,   building:true, trap:true, dmg:15, rad:14},
-  catapult: {label:"Catapult", icon:"🪨", cost:50, hp:40,  building:true, range:800, cd:10, aoe:16, dmgBuilding:15, dmgTroop:5},
+  catapult: {label:"Catapult", icon:"🪨", cost:50, hp:40,  building:true, gw:2, range:800, cd:10, aoe:16, dmgBuilding:15, dmgTroop:5},
   duck:     {label:"Duck",     icon:"🦆", cost:6,  hp:16,  building:true, water:true, range:70, cd:1.0, slow:1.6, dmg:0.1},
   magicwell:{label:"Mana Well",icon:"🔮", cost:5,  hp:20,  building:true, magicWater:true},
   soldier:  {label:"Soldier",  icon:"⚔️", cost:4,  hp:10,  troop:true, spd:32, range:11, dmg:3, cd:0.7, aggro:60},
@@ -421,8 +421,9 @@ function applyUpgrade(side){
   sfx("coin");
 }
 function makeBuilding(side,kind,gx,gy){
-  const hp=tstat(side,kind,"hp");
-  return {side, kind, building:true, gx, gy, x:cellCx(gx), y:cellCx(gy),
+  const hp=tstat(side,kind,"hp"), gw=KINDS[kind].gw||1, gh=KINDS[kind].gh||1;
+  return {side, kind, building:true, gx, gy, gw, gh,
+    x:gx*CELL+gw*CELL/2, y:gy*CELL+gh*CELL/2,     // centred over the (possibly multi-cell) footprint
     hp, maxHp:hp, cd:0};
 }
 function makeTroop(side,kind,x,y){
@@ -480,12 +481,17 @@ function inTerritory(side,gx,gy){
 }
 function bagAt(gx,gy){ return moneybags.some(b=>b.gx===gx && b.gy===gy); }
 function validSpot(side,gx,gy,kind){
-  if(!inTerritory(side,gx,gy) || gy<0 || gy>=ROWS) return false;
-  if(occupied(gx,gy) || bagAt(gx,gy)) return false;
-  const pond=pondAt(gx,gy);
-  if(kind==="duck")      return !!pond && !pond.magic;   // ducks live on BLUE water
-  if(kind==="magicwell") return !!pond && !!pond.magic;  // mana wells on PURPLE water
-  return !blockedCell(gx,gy);
+  const gw=(KINDS[kind]&&KINDS[kind].gw)||1, gh=(KINDS[kind]&&KINDS[kind].gh)||1;
+  for(let dx=0;dx<gw;dx++)for(let dy=0;dy<gh;dy++){    // every cell of the footprint must be free & legal
+    const cx=gx+dx, cy=gy+dy;
+    if(cx<0||cx>=COLS||cy<0||cy>=ROWS) return false;
+    if(!inTerritory(side,cx,cy)) return false;
+    if(occupied(cx,cy) || bagAt(cx,cy)) return false;
+    if(kind==="duck"){       const p=pondAt(cx,cy); if(!(p && !p.magic)) return false; }   // BLUE water
+    else if(kind==="magicwell"){ const p=pondAt(cx,cy); if(!(p && p.magic)) return false; } // PURPLE water
+    else if(blockedCell(cx,cy)) return false;
+  }
+  return true;
 }
 function canPlace(gx,gy){
   if(selected==="sell") return false;
@@ -817,7 +823,7 @@ function nearestEnemyBuilding(e, range){
   return (best && bd<=range) ? {t:best,d:bd} : null;
 }
 // body radius used for surface-to-surface range checks & collision
-function bodyR(o){ return o.kind==="tower"?15 : o.building?7 : 3; }
+function bodyR(o){ return o.kind==="tower"?15 : o.kind==="catapult"?11 : o.building?7 : 3; }
 // priority inside detection radius: enemy troops > money bags > enemy buildings
 function acquireTarget(e, aggro){
   let bestT=null,bdT=1e9, bestB=null,bdB=1e9, bestBag=null,bdBag=1e9;
@@ -2281,19 +2287,20 @@ function drawTurret(e){
   if(e.hp<e.maxHp) drawHpBar(e,x+2,y-8,12);
 }
 function drawCatapult(e){
-  const x=e.gx*CELL, y=e.gy*CELL, col=teamCol(e.side);
-  // wooden base + wheels
-  px(x+2,y+11,12,3,"#3a2a18"); px(x+2,y+13,2,2,"#241812"); px(x+12,y+13,2,2,"#241812");
-  px(x+3,y+8,10,4,"#6a4a2a"); px(x+3,y+8,10,1,"#8a6a3f");
-  // throwing arm, angled toward the aim; a rock in the bucket
+  const cx=e.x, cy=e.y, col=teamCol(e.side);       // centred over the 2-cell footprint
+  // wide wooden base spanning both cells + wheels at each end
+  px(cx-13,cy+5,26,3,"#3a2a18");
+  px(cx-12,cy+7,3,2,"#241812"); px(cx+9,cy+7,3,2,"#241812");
+  px(cx-12,cy+1,24,4,"#6a4a2a"); px(cx-12,cy+1,24,1,"#8a6a3f");
+  // throwing arm angled toward the aim; a rock in the bucket
   const a=e.aim!==undefined?e.aim:(e.side==="p"?0:Math.PI), sw=Math.sin(animT*2+e.x)*0.12;
-  const bx=e.x+Math.cos(a+sw)*6, by=e.y-5+Math.sin(a+sw)*3;
-  ctx.strokeStyle="#7a5a34"; ctx.lineWidth=2; ctx.lineCap="round";
-  ctx.beginPath(); ctx.moveTo(e.x,e.y+3); ctx.lineTo(bx,by); ctx.stroke();
-  ctx.fillStyle="#8a7860"; ctx.beginPath(); ctx.arc(bx,by,2.4,0,7); ctx.fill();
+  const bx=cx+Math.cos(a+sw)*9, by=cy-6+Math.sin(a+sw)*3;
+  ctx.strokeStyle="#7a5a34"; ctx.lineWidth=2.4; ctx.lineCap="round";
+  ctx.beginPath(); ctx.moveTo(cx,cy-1); ctx.lineTo(bx,by); ctx.stroke();
+  ctx.fillStyle="#8a7860"; ctx.beginPath(); ctx.arc(bx,by,2.6,0,7); ctx.fill();
   px(bx-1,by-1,1,1,"#c3b088");                                      // rock highlight
-  px(e.x-1,y+7,2,1,col);                                            // team band
-  if(e.hp<e.maxHp) drawHpBar(e,x+2,y-6,12);
+  px(cx-1,cy+3,2,1,col);                                            // team band
+  if(e.hp<e.maxHp) drawHpBar(e,cx-6,cy-9,12);
 }
 function drawTroop(e){
   const me=e.side==="p", body=teamCol(e.side), dark=teamColDark(e.side);
@@ -2425,7 +2432,7 @@ function drawGhost(){
     return;
   }
   ctx.globalAlpha=.45;
-  px(hover.gx*CELL,hover.gy*CELL,CELL,CELL, ok?"#6ee77a":"#ff6b6b");
+  px(hover.gx*CELL,hover.gy*CELL,(k.gw||1)*CELL,(k.gh||1)*CELL, ok?"#6ee77a":"#ff6b6b");
   ctx.globalAlpha=1;
 }
 function drawSpellMarkers(){
@@ -2634,6 +2641,7 @@ function setMsgText(t){ document.getElementById("msg").textContent=t; }
 
 // ============================== PATCH NOTES ==============================
     const PATCH_NOTES = [
+  ["3.16.12.5",["🪨 The Catapult is a big siege engine — it now takes up 2 tiles side by side, so you'll need two free adjacent spaces to place one."]],
   ["3.16.11.5",["🪨 Catapult blast radius now matches the Heal spell's, and it stays the same as you upgrade — upgrades only speed up the fire rate and raise damage, not the blast size."]],
   ["3.16.10.5",["🪨 NEW CARD: Catapult (💰50) — a siege engine that targets ONLY enemy buildings, anywhere on the map. Lobs a boulder for 15 damage to buildings (5 to troops caught in the blast). Slow: fires every 10s, upgradeable down to every 3s. Upgrades cost more than it does to build (55/70/90)."]],
   ["3.15.10.5",["🏠 Menu button: quit back to the main menu anytime — from the corner during a match, or from the game-over screen.",

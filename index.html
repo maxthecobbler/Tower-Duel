@@ -159,7 +159,7 @@
     </div>
   </div>
   <div id="menu">
-    <h2>🏰 TOWER DUEL <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">3.16.10.5</span></h2>
+    <h2>🏰 TOWER DUEL <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">3.16.11.5</span></h2>
     <div id="sceneSel">
       <button data-scene="forest" class="on">🌲 Forest</button>
       <button data-scene="beach">🏖️ Beach</button>
@@ -243,7 +243,7 @@ const KINDS = {
   harvester:{label:"Harvester",icon:"🌾", cost:5,  hp:20,  building:true},
   turret:   {label:"Turret",   icon:"🗼", cost:8,  hp:30,  building:true, range:90, dmg:5, cd:1.4, aoe:22},
   spikes:   {label:"Spikes",   icon:"🪤", cost:7,  hp:1,   building:true, trap:true, dmg:15, rad:14},
-  catapult: {label:"Catapult", icon:"🪨", cost:50, hp:40,  building:true, range:800, cd:10, aoe:26, dmgBuilding:15, dmgTroop:5},
+  catapult: {label:"Catapult", icon:"🪨", cost:50, hp:40,  building:true, range:800, cd:10, aoe:16, dmgBuilding:15, dmgTroop:5},
   duck:     {label:"Duck",     icon:"🦆", cost:6,  hp:16,  building:true, water:true, range:70, cd:1.0, slow:1.6, dmg:0.1},
   magicwell:{label:"Mana Well",icon:"🔮", cost:5,  hp:20,  building:true, magicWater:true},
   soldier:  {label:"Soldier",  icon:"⚔️", cost:4,  hp:10,  troop:true, spd:32, range:11, dmg:3, cd:0.7, aggro:60},
@@ -2634,6 +2634,7 @@ function setMsgText(t){ document.getElementById("msg").textContent=t; }
 
 // ============================== PATCH NOTES ==============================
     const PATCH_NOTES = [
+  ["3.16.11.5",["🪨 Catapult blast radius now matches the Heal spell's, and it stays the same as you upgrade — upgrades only speed up the fire rate and raise damage, not the blast size."]],
   ["3.16.10.5",["🪨 NEW CARD: Catapult (💰50) — a siege engine that targets ONLY enemy buildings, anywhere on the map. Lobs a boulder for 15 damage to buildings (5 to troops caught in the blast). Slow: fires every 10s, upgradeable down to every 3s. Upgrades cost more than it does to build (55/70/90)."]],
   ["3.15.10.5",["🏠 Menu button: quit back to the main menu anytime — from the corner during a match, or from the game-over screen.",
           "Fixed: \"Play Again\" after a 3-player game now starts another 3-player game (it used to drop you into a 2-player match)."]],

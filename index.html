@@ -125,7 +125,7 @@
   <div id="tip"></div>
   <div id="banner"><div class="big" id="bannerText"></div><button onclick="bannerAction()">↺ Play Again</button></div>
   <div id="menu">
-    <h2>🏰 TOWER DUEL <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">v29</span></h2>
+    <h2>🏰 TOWER DUEL <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">v30</span></h2>
     <div id="sceneSel">
       <button data-scene="forest" class="on">🌲 Forest</button>
       <button data-scene="beach">🏖️ Beach</button>
@@ -135,7 +135,8 @@
     <button onclick="menuBot()">🤖 Play vs Bot (turn-based)</button>
     <button onclick="menuBlitz()">⚡ Blitz vs Bot (real-time!)</button>
     <button onclick="menu3()">🔺 3-Player Free-for-All (vs 2 Bots)</button>
-    <button onclick="menuCreate()">🔒 Create Private Room</button>
+    <button onclick="menuCreate()">🔒 Create Private Room (2P)</button>
+    <button onclick="menuCreate3()">🔺 Create 3-Player Room (online)</button>
     <div class="joinrow">
       <input id="joinCode" maxlength="4" placeholder="CODE">
       <button style="min-width:100px" onclick="menuJoin()">Join</button>
@@ -1186,8 +1187,8 @@ function endBattle(){
   floatText(mySide==="p"?40:W-40, 90, "+"+incMe+" 💰", PAL.gold);
   sfx("coin");
   for(const e of ents) if(e.kind==="harvester") puff(e.x,e.y-4,PAL.gold,4);
-  // desync check: both clients compute the shared public state; host compares
-  if(mode==="online"){
+  // desync check: both clients compute the shared public state; host compares (2-player only)
+  if(mode==="online" && netN===2){
     const rep={pG:golds.p, bG:golds.b, pHp:towerHp("p"), bHp:towerHp("b"), n:ents.length, turn,
       pLv:(towerOf("p")||{level:1}).level, bLv:(towerOf("b")||{level:1}).level, bags:moneybags.length,
       tp:techs.p, tb:techs.b, pM:magics.p, bM:magics.b};
@@ -1201,12 +1202,14 @@ function towerHp(side){ const t=ents.find(e=>e.kind==="tower"&&e.side===side); r
 function startBattle(){
   if(RT||phase!=="build"||over||menuOpen) return;
   if(mode==="online"){
-    if(waitingOrders||!conn) return;
+    if(waitingOrders) return;
+    if(isHost){ if(netN===3 ? guests.length<2 : !conn) return; }
+    else if(!conn) return;
     waitingOrders=true; selected=null;
-    if(isHost){ myCommitted=true; tryResolveP2P(); }
+    if(isHost){ myCommitted=true; if(netN===3) tryResolveP2P3(); else tryResolveP2P(); }
     else sendMsg({type:"orders", orders:myOrders});
     refreshUI();
-    return;                       // battle starts when both players have committed
+    return;                       // battle starts when all players have committed
   }
   selected=null;
   if(NP===3){ for(const s of SIDES) if(s!==mySide) botBuild3(s); }
@@ -1223,8 +1226,8 @@ function resolveOrders(data){
   golds[mySide]+=costOfSide(mySide,myOrders);   // refund both currencies, deduct canonically below
   magics[mySide]+=costMagicOf(myOrders);
   myOrders=[]; upgradeQueued=false; pendingTech={};
-  // both clients track both golds & magic, so each can verify the other didn't overspend
-  for(const side of ["p","b"]){
+  // every client tracks all sides' gold & magic, so each can verify nobody overspent
+  for(const side of SIDES){
     const troopOrders=(data[side]||[]).filter(o=>KINDS[o.kind]&&KINDS[o.kind].troop).length;
     if(costOfSide(side,data[side]||[]) > golds[side]+1e-6 ||
        costMagicOf(data[side]||[]) > magics[side]+1e-6 ||
@@ -1233,7 +1236,7 @@ function resolveOrders(data){
       return;
     }
   }
-  for(const side of ["p","b"])                  // fixed order = identical ents array on both clients
+  for(const side of SIDES)                       // fixed order = identical ents array on every client
     for(const o of (data[side]||[])){
       if(o.kind==="upgrade"){
         const t=towerOf(side);
@@ -2462,6 +2465,8 @@ function loop(now){
 // run the identical deterministic sim.
 let peer=null, conn=null, isHost=false, oppOrders=null, myCommitted=false;
 let myReport=null, oppReport=null, hostingCode=null;
+let netN=2, guests=[];          // netN = humans in this online match; guests = host's guest connections (3-player)
+function broadcast(m){ for(const g of guests) if(g.conn&&g.conn.open) g.conn.send(m); }
 
 const CODE_CHARS="ABCDEFGHJKLMNPQRSTUVWXYZ";
 const makeCode=()=>Array.from({length:4},()=>CODE_CHARS[Math.random()*CODE_CHARS.length|0]).join("");
@@ -2484,6 +2489,8 @@ function setMsgText(t){ document.getElementById("msg").textContent=t; }
 
 // ============================== PATCH NOTES ==============================
     const PATCH_NOTES = [
+  ["v30",["🌐 ONLINE 3-PLAYER: \"Create 3-Player Room\" hosts a match for three real players over the internet. Share the code; once two friends join, the triangular free-for-all begins. Same cards, mechanics, and last-tower-standing rules.",
+          "The host relays between both guests; every client runs the same deterministic battle."]],
   ["v29",["🔺 NEW MODE: 3-Player Free-for-All (vs 2 bots) on a big triangular map! Three corner towers (🔵 you, 🔴, 🟢), wedge territories, same cards & mechanics. Last tower standing wins — troops march at the nearest enemy tower.",
           "Note: online 3-player is coming in a follow-up; this first version is offline vs two bots."]],
   ["v28",["🔄 You can now sell buildings you placed on the same turn — and sold buildings vanish instantly, freeing the tile so you can immediately place something else there.",
@@ -2557,9 +2564,11 @@ function peerReady(){
 }
 function cleanupNet(){
   try{ if(conn) conn.close(); }catch(e){}
+  for(const g of guests){ try{ if(g.conn) g.conn.close(); }catch(e){} }
+  guests=[];
   try{ if(peer) peer.destroy(); }catch(e){}
   peer=conn=null; isHost=false; oppOrders=null; myCommitted=false; myReport=null; oppReport=null;
-  hostingCode=null;
+  hostingCode=null; netN=2;
 }
 function sendMsg(m){ if(conn&&conn.open) conn.send(m); }
 
@@ -2577,8 +2586,9 @@ function bindConn(){
     else if(m.type==="start" && !isHost){
       if(mode==="online" && !menuOpen) return;      // already started
       if(m.scene) applyScene(m.scene);              // adopt the host's map/theme
+      netN=m.players||2;
       setMenuStatus("","");
-      beginMatch({mode:"online", seed:m.seed, side:"b"});
+      beginMatch({mode:"online", seed:m.seed, side:m.side||"b", players:netN});
     }
     else if(m.type==="orders" && isHost){ oppOrders=Array.isArray(m.orders)?m.orders:[]; tryResolveP2P(); }
     else if(m.type==="resolve" && !isHost){ resolveOrders(m.data||{}); }
@@ -2597,6 +2607,37 @@ function tryResolveP2P(){
   sendMsg({type:"resolve", data});
   resolveOrders(data);
 }
+// host (3-player hub): resolve once the host committed AND both guests' orders arrived
+function tryResolveP2P3(){
+  if(!isHost || netN!==3 || !myCommitted) return;
+  if(guests.length<2 || !guests.every(g=>g.orders)) return;
+  const data={p:myOrders};                     // host is always side "p"; guests are "b" and "c"
+  for(const g of guests) data[g.side]=g.orders;
+  myCommitted=false; for(const g of guests) g.orders=null;
+  broadcast({type:"resolve", data});
+  resolveOrders(data);
+}
+// host: per-guest message handler (3-player)
+function bindGuestConn(g){
+  g.conn.on("data", m=>{
+    if(!m||typeof m!=="object") return;
+    if(m.type==="hello"){
+      if(!menuOpen) return;                    // already started
+      g.helloed=true;
+      const n=guests.filter(x=>x.helloed).length;
+      setMenuStatus(`Waiting for players… (${n}/2 joined)`, hostingCode);
+      if(guests.length===2 && guests.every(x=>x.helloed)){
+        const seed=Math.floor(Math.random()*2**31);
+        for(const gg of guests) gg.conn.send({type:"start", seed, scene:sceneKey, side:gg.side, players:3});
+        setMenuStatus("","");
+        beginMatch({mode:"online", seed, side:"p", players:3});
+      }
+    }
+    else if(m.type==="orders"){ g.orders=Array.isArray(m.orders)?m.orders:[]; tryResolveP2P3(); }
+  });
+  g.conn.on("close", ()=>{ if(!over && !menuOpen) showBanner("🏳️ A player left the game","var(--good)"); });
+  g.conn.on("error", ()=>{ if(!over && !menuOpen) showBanner("⚠️ Connection lost","var(--accent)"); });
+}
 function checkReports(){
   if(!myReport || !oppReport) return;
   if(JSON.stringify(myReport)!==JSON.stringify(oppReport)){
@@ -2609,26 +2650,40 @@ function checkReports(){
 function menuBot(){ cleanupNet(); beginMatch({mode:"bot"}); }
 function menuBlitz(){ cleanupNet(); beginMatch({mode:"bot", rt:true}); }
 function menu3(){ cleanupNet(); beginMatch({mode:"bot", players:3}); }
-function menuCreate(){
+function menuCreate(){ hostRoom(2); }
+function menuCreate3(){ hostRoom(3); }
+function hostRoom(size){
   if(!peerReady()) return;
   cleanupNet();
+  netN=size; isHost=true;
   const code=makeCode();
   setMenuStatus("Setting up room…","");
   peer=new Peer(peerId(code), PEER_OPTS);
   peer.on("open", ()=>{
     hostingCode=code;
-    setMenuStatus("Share this code with a friend (they join from their own device or a 2nd window):", code);
+    setMenuStatus(size===3 ? "Share this code — waiting for 2 players to join:"
+                           : "Share this code with a friend (they join from their own device or a 2nd window):", code);
   });
   peer.on("disconnected", ()=>{ try{ peer.reconnect(); }catch(e){} });
   peer.on("error", err=>{
-    if(err.type==="unavailable-id") menuCreate();   // code collision → roll a new one
+    if(err.type==="unavailable-id") hostRoom(size);   // code collision → roll a new one
     else if(err.type==="network") setMenuStatus("Can't reach the connection broker — check your internet and try again.","");
     else setMenuStatus("Error: "+err.type,"");
   });
   peer.on("connection", c=>{
-    if(conn && conn.open){ try{c.close();}catch(e){} return; }   // room is full
-    conn=c; isHost=true;
-    bindConn();                                     // bind BEFORE open — no message can be missed
+    isHost=true;
+    if(size===3){
+      if(guests.length>=2 || !menuOpen){ try{c.close();}catch(e){} return; }   // room full / already started
+      const g={conn:c, side: guests.length===0?"b":"c", orders:null, helloed:false};
+      guests.push(g);
+      bindGuestConn(g);                               // bind BEFORE open — no message can be missed
+      const onOpen=()=>setMenuStatus(`Player connected (${guests.length}/2)…`, hostingCode);
+      if(c.open) onOpen(); else c.on("open", onOpen);
+      return;
+    }
+    if(conn && conn.open){ try{c.close();}catch(e){} return; }   // 2-player room is full
+    conn=c;
+    bindConn();                                       // bind BEFORE open — no message can be missed
     const onOpen=()=>setMenuStatus("Player connected — starting…","");
     if(c.open) onOpen(); else c.on("open", onOpen);
   });

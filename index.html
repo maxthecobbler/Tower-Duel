@@ -122,7 +122,7 @@
   <div id="tip"></div>
   <div id="banner"><div class="big" id="bannerText"></div><button onclick="bannerAction()">↺ Play Again</button></div>
   <div id="menu">
-    <h2>🏰 TOWER DUEL <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">v27</span></h2>
+    <h2>🏰 TOWER DUEL <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">v28</span></h2>
     <div id="sceneSel">
       <button data-scene="forest" class="on">🌲 Forest</button>
       <button data-scene="beach">🏖️ Beach</button>
@@ -314,7 +314,7 @@ function sfx(type){
 const rnd=(a,b)=>a+Math.random()*(b-a);            // cosmetic randomness only
 const dist=(a,b)=>hyp(a.x-b.x,a.y-b.y);
 const cellCx=g=>g*CELL+CELL/2;
-function occupied(gx,gy){ return ents.some(e=>e.building && e.gx!==undefined &&
+function occupied(gx,gy){ return ents.some(e=>e.building && !e.dead && !e.selling && e.gx!==undefined &&
   gx>=e.gx && gx<e.gx+(e.gw||1) && gy>=e.gy && gy<e.gy+(e.gh||1)); }
 
 function makeTower(side){
@@ -397,14 +397,26 @@ function sellAt(gx,gy){
   if(!canBuild()) return;
   const e=sellableAt(mySide,gx,gy);
   if(!e){ setMsgText("Nothing of yours to sell there."); return; }
-  if(e.pending){ setMsgText("Can't sell something placed this turn."); return; }
-  const refund=Math.floor(KINDS[e.kind].cost*SELL_RATE);
-  golds[mySide]+=refund;
-  if(mode==="online"){
-    e.selling=true;                              // ghosted until the turn resolves
-    myOrders.push({kind:"sell",gx:e.gx,gy:e.gy});
-  } else {
+  let refund;
+  if(e.pending){
+    // undo a placement made this turn (online): full refund, cancel its pending order
+    refund=KINDS[e.kind].cost;
+    golds[mySide]+=refund;
     e.dead=true; ents=ents.filter(o=>!o.dead);
+    for(let i=myOrders.length-1;i>=0;i--){          // drop the matching place order
+      const o=myOrders[i];
+      if(o.kind===e.kind && o.gx===e.gx && o.gy===e.gy){ myOrders.splice(i,1); break; }
+    }
+  } else {
+    // committed building: 50% refund, cell frees immediately for a replacement
+    refund=Math.floor(KINDS[e.kind].cost*SELL_RATE);
+    golds[mySide]+=refund;
+    if(mode==="online"){
+      e.selling=true;                               // kept (hidden) until the canonical sell resolves
+      myOrders.push({kind:"sell",gx:e.gx,gy:e.gy});
+    } else {
+      e.dead=true; ents=ents.filter(o=>!o.dead);
+    }
   }
   floatText(e.x,e.y-12,"+"+refund+" 💰",PAL.gold);
   for(let i=0;i<6;i++) parts.push({x:e.x,y:e.y,vx:rnd(-35,35),vy:rnd(-50,-15),life:rnd(.35,.6),t:0,size:rnd(1,2),color:PAL.gold});
@@ -1245,9 +1257,9 @@ const THEMES = {
     proj:{color:"#b7a998", shape:"rock"}, splash:"crack!",
   },
 };
-let SCENE = THEMES.forest;
+let SCENE = THEMES.forest, sceneKey = "forest";
 function applyScene(key){
-  SCENE = THEMES[key] || THEMES.forest;
+  SCENE = THEMES[key] || THEMES.forest; sceneKey = THEMES[key] ? key : "forest";
   Object.assign(GRASS, SCENE.grass);            // GRASS/PAL fields are mutated live; drawGround reads them
   PAL.forest = SCENE.forest;
   PAL.neutral = SCENE.neutral; PAL.neutralB = SCENE.neutralB;
@@ -2124,7 +2136,7 @@ function render(){
   // sort by y for pseudo-depth
   const sorted=[...ents].sort((a,b)=>a.y-b.y);
   for(const e of sorted){
-    if(e.selling) ctx.globalAlpha=.45;            // sold this turn: ghosted until resolve
+    if(e.selling) continue;                       // sold: hidden immediately (removed when the turn resolves)
     if(e.kind==="tower") drawTowerSpr(e);
     else if(e.kind==="wall") drawWall(e);
     else if(e.kind==="harvester") drawHarvester(e);
@@ -2133,7 +2145,6 @@ function render(){
     else if(e.kind==="duck") drawDuck(e);
     else if(e.kind==="magicwell") drawMagicWell(e);
     else drawTroop(e);
-    if(e.selling) ctx.globalAlpha=1;
   }
   drawFires();
   drawStatusFx();
@@ -2252,6 +2263,9 @@ function setMsgText(t){ document.getElementById("msg").textContent=t; }
 
 // ============================== PATCH NOTES ==============================
     const PATCH_NOTES = [
+  ["v28",["🔄 You can now sell buildings you placed on the same turn — and sold buildings vanish instantly, freeing the tile so you can immediately place something else there.",
+          "Selling a placement you made this turn (online) refunds the full cost, like an undo.",
+          "🌐 Online map syncing: both players now share the host's chosen battlefield scene."]],
   ["v27",["👁 \"Show ranges\" toggle below the battlefield: display attack-range rings for the 🔵 Blue side, the 🔴 Red side, or both at once."]],
   ["v26",["🏹 The archer now points in the direction it's aiming, rather than always facing forward.",
           "🎯 Hover over a tower, turret, or archer to see a ring showing its attack range."]],
@@ -2333,12 +2347,13 @@ function bindConn(){
       // guest's handlers are provably live now → safe to start
       if(mode==="online" && !menuOpen) return;      // already started
       const seed=Math.floor(Math.random()*2**31);
-      sendMsg({type:"start", seed});
+      sendMsg({type:"start", seed, scene:sceneKey});  // host's map/theme is authoritative
       setMenuStatus("","");
       beginMatch({mode:"online", seed, side:"p"});
     }
     else if(m.type==="start" && !isHost){
       if(mode==="online" && !menuOpen) return;      // already started
+      if(m.scene) applyScene(m.scene);              // adopt the host's map/theme
       setMenuStatus("","");
       beginMatch({mode:"online", seed:m.seed, side:"b"});
     }

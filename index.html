@@ -106,7 +106,7 @@
   <div id="tip"></div>
   <div id="banner"><div class="big" id="bannerText"></div><button onclick="bannerAction()">↺ Play Again</button></div>
   <div id="menu">
-    <h2>🏰 TOWER DUEL <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">v23</span></h2>
+    <h2>🏰 TOWER DUEL <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">v24</span></h2>
     <div id="sceneSel">
       <button data-scene="forest" class="on">🌲 Forest</button>
       <button data-scene="beach">🏖️ Beach</button>
@@ -1153,7 +1153,7 @@ const THEMES = {
     forest:"#22331f",
     grass:{base:"#3f5c3d", light:"#4d6e48", mid:"#446341", dark:"#334d33", darker:"#2c4430"},
     neutral:"#5c4f3d", neutralB:"#655741",
-    tree:"leafy", obstacle:"pond",
+    tree:"leafy", obstacle:"pond", well:"well",
     unit:{sprite:"duck", label:"Duck", icon:"🦆",
       tip:"16 HP — Blue water only! Squirts water at enemy troops (range 70): slows them 50% for 1.6s and deals 0.1 dmg. Ferocious."},
     proj:{color:"#7db4ff", shape:"drop"}, splash:"splash!",
@@ -1163,7 +1163,7 @@ const THEMES = {
     forest:"#1c5a80", border:"water",            // surrounded by ocean → the field is an island
     grass:{base:"#e2cd93", light:"#efdca6", mid:"#e0c98a", dark:"#d2ba78", darker:"#c6ac6a"},
     neutral:"#cdb583", neutralB:"#d8c290",
-    tree:"palm", obstacle:"sandcastle",
+    tree:"palm", obstacle:"sandcastle", well:"clam",
     unit:{sprite:"crab", label:"Crab", icon:"🦀",
       tip:"16 HP — Sand castles only! Lobs beach balls at enemy troops (range 70): slows them 50% for 1.6s and deals 0.1 dmg. Snippy."},
     proj:{color:"#ff5b6b", shape:"ball"}, splash:"bonk!",
@@ -1173,7 +1173,7 @@ const THEMES = {
     forest:"#38383f",
     grass:{base:"#6f7668", light:"#828a78", mid:"#727a68", dark:"#5c6356", darker:"#4e5449"},
     neutral:"#6b6558", neutralB:"#757060",
-    tree:"pine", obstacle:"rockpile",
+    tree:"pine", obstacle:"rockpile", well:"geode",
     unit:{sprite:"goat", label:"Goat", icon:"🐐",
       tip:"16 HP — Rock piles only! Hurls rocks at enemy troops (range 70): slows them 50% for 1.6s and deals 0.1 dmg. Stubborn."},
     proj:{color:"#b7a998", shape:"rock"}, splash:"crack!",
@@ -1505,20 +1505,47 @@ function drawSandCastle(p){
 }
 function drawGrove(g){ for(const t of g.trees) if(!t.dead) drawTree(t); }
 
-function drawMagicWell(e){
-  const me=e.side==="p", team=me?PAL.you:PAL.bot;
-  const bob=Math.sin(animT*2+e.x)*0.8;
-  // stone well ring
-  ctx.fillStyle="#4a3f5c"; ctx.beginPath(); ctx.arc(e.x,e.y,6,0,7); ctx.fill();
-  ctx.fillStyle="#6b5c85"; ctx.beginPath(); ctx.arc(e.x,e.y,4.6,0,7); ctx.fill();
-  ctx.fillStyle="#2a1d3d"; ctx.beginPath(); ctx.arc(e.x,e.y,3,0,7); ctx.fill();
-  // floating mana orb
+function drawManaOrb(e,bob){                        // shared floating mana orb, all themes
   ctx.globalAlpha=.4; ctx.fillStyle="#c9a0ff";
   ctx.beginPath(); ctx.arc(e.x,e.y-5+bob,3.4,0,7); ctx.fill();
   ctx.globalAlpha=1;
   ctx.fillStyle="#a86ee8"; ctx.beginPath(); ctx.arc(e.x,e.y-5+bob,2,0,7); ctx.fill();
   px(e.x-1,e.y-6+bob,1,1,"#f0e4ff");
-  px(e.x-1,e.y+5,2,1,team);                       // team band
+}
+function drawManaClam(e){                           // beach: a pearl-glowing clam shell (top-down)
+  const x=e.x, y=e.y;
+  ctx.fillStyle="#c98fb0"; ctx.beginPath(); ctx.ellipse(x,y+1,6.5,5,0,0,7); ctx.fill();     // lower rim
+  ctx.fillStyle="#f0d0e0"; ctx.beginPath(); ctx.ellipse(x,y,6,4.4,0,0,7); ctx.fill();        // shell body
+  ctx.strokeStyle="#d9a6c4"; ctx.lineWidth=1;                                                // fan ridges
+  for(let i=-2;i<=2;i++){ ctx.beginPath(); ctx.moveTo(x,y+2); ctx.lineTo(x+i*2.4,y-4); ctx.stroke(); }
+  ctx.fillStyle="#7a4f86"; ctx.beginPath(); ctx.ellipse(x,y-0.5,3.6,2.4,0,0,7); ctx.fill();  // open interior
+  ctx.fillStyle="#5e3a6e"; ctx.beginPath(); ctx.ellipse(x,y-0.5,2.6,1.6,0,0,7); ctx.fill();
+  ctx.globalAlpha=.5; ctx.fillStyle="#e8d6ff"; ctx.beginPath(); ctx.arc(x,y-0.5,2.2,0,7); ctx.fill(); ctx.globalAlpha=1; // pearl glow
+}
+function drawManaGeode(e){                          // mountains: a cracked rock lined with amethyst
+  const x=e.x, y=e.y, sh=Math.sin(animT*3+e.x)*0.4;
+  ctx.fillStyle="#3a352d"; ctx.beginPath(); ctx.arc(x+0.5,y+0.8,6.4,0,7); ctx.fill();        // contact shadow
+  ctx.fillStyle="#6b6358"; ctx.beginPath(); ctx.arc(x,y,6,0,7); ctx.fill();                  // rock body
+  ctx.fillStyle="#847c6d"; ctx.beginPath(); ctx.arc(x-1.4,y-1.4,3.4,0,7); ctx.fill();        // lit face
+  ctx.fillStyle="#241c34"; ctx.beginPath(); ctx.arc(x,y,3.8,0,7); ctx.fill();                // hollow
+  for(const [dx,dy,h] of [[-2,0.5,3],[0,-1,4.5],[2,0.5,3],[-1,1.6,2.4],[1.3,1.7,2.6]]){      // crystal cluster
+    px(x+dx-0.7, y+dy-h+sh, 1.4, h, "#7a4fae");
+    px(x+dx-0.3, y+dy-h*0.6+sh, 0.9, h*0.6, "#c9a0ff");
+    px(x+dx-0.3, y+dy-h+sh-1, 1,1, "#f0e4ff");
+  }
+}
+function drawMagicWell(e){
+  const me=e.side==="p", team=me?PAL.you:PAL.bot;
+  const bob=Math.sin(animT*2+e.x)*0.8;
+  if(SCENE.well==="clam")       drawManaClam(e);
+  else if(SCENE.well==="geode") drawManaGeode(e);
+  else {                                            // forest: stone well ring
+    ctx.fillStyle="#4a3f5c"; ctx.beginPath(); ctx.arc(e.x,e.y,6,0,7); ctx.fill();
+    ctx.fillStyle="#6b5c85"; ctx.beginPath(); ctx.arc(e.x,e.y,4.6,0,7); ctx.fill();
+    ctx.fillStyle="#2a1d3d"; ctx.beginPath(); ctx.arc(e.x,e.y,3,0,7); ctx.fill();
+  }
+  drawManaOrb(e,bob);
+  px(e.x-1,e.y+5,2,1,team);                         // team band
   if(Math.random()<.06)                            // rising motes
     parts.push({x:e.x+rnd(-3,3),y:e.y-4,vx:0,vy:rnd(-14,-8),life:rnd(.4,.8),t:0,size:1,color:"#c9a0ff"});
   if(e.hp<e.maxHp) drawHpBar(e,e.x-6,e.y-16,12);

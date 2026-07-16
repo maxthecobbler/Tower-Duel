@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Tower Duel — Battlefield</title>
 <style>
   :root {
@@ -11,12 +11,14 @@
   }
   *{box-sizing:border-box;margin:0;padding:0}
   body{background:var(--bg);color:var(--text);font-family:"Segoe UI",system-ui,sans-serif;
-    display:flex;flex-direction:column;align-items:center;padding:10px;min-height:100vh}
+    display:flex;flex-direction:column;align-items:center;padding:10px;min-height:100vh;
+    -webkit-touch-callout:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+  button,input,.tool,#sceneSel button,#rangeBar button{touch-action:manipulation}
   h1{font-size:1.3em;letter-spacing:2px;margin:4px 0}
   h1 span{color:var(--accent)}
   #wrap{position:relative;width:min(96vw,940px);overflow:hidden;border-radius:8px}
   canvas{width:100%;display:block;image-rendering:pixelated;image-rendering:crisp-edges;
-    border-radius:8px;border:2px solid #2c3050;background:#20283a;cursor:crosshair}
+    border-radius:8px;border:2px solid #2c3050;background:#20283a;cursor:crosshair;touch-action:none}
   #hud{position:absolute;top:6px;left:50%;transform:translateX(-50%);z-index:3;
     display:flex;gap:14px;align-items:center;font-size:.88em;white-space:nowrap;
     background:rgba(14,17,28,.72);padding:4px 16px;border-radius:20px;border:1px solid #2c3050;
@@ -105,6 +107,25 @@
     padding:7px 12px;font-size:.8em;max-width:340px;text-align:center;color:var(--text);
     pointer-events:none;display:none}
   #tip b{color:var(--accent)}
+  /* ---------- phones / narrow screens ---------- */
+  @media (max-width:640px){
+    body{padding:4px}
+    h1{font-size:1em;letter-spacing:1px}
+    #wrap,#toolbar{width:100vw}
+    #hud{gap:6px;font-size:.66em;padding:3px 8px;flex-wrap:wrap;justify-content:center;max-width:97vw}
+    #hud .gold{font-size:1em}
+    #toolbar{gap:4px;padding:6px}
+    .tool{min-width:0;flex:1 1 auto;padding:5px 4px}
+    .tool .ic{font-size:1.05em}
+    .tool .nm{font-size:.6em}
+    .tool .cs{font-size:.62em}
+    .tool .up{top:-7px;right:-4px;padding:2px 6px;font-size:.62em}   /* bigger tap target */
+    #fight{font-size:1em;padding:8px 18px;min-width:0;flex:1 1 100%}
+    #tip{max-width:92vw;font-size:.75em}
+    #menu button{font-size:.95em;padding:11px 16px;min-width:0;width:88vw;max-width:320px}
+    #sceneSel button,#rangeBar button{padding:8px 10px}   /* easier to tap */
+    #msg{font-size:.72em}
+  }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js" crossorigin="anonymous"></script>
 </head>
@@ -125,7 +146,7 @@
   <div id="tip"></div>
   <div id="banner"><div class="big" id="bannerText"></div><button onclick="bannerAction()">↺ Play Again</button></div>
   <div id="menu">
-    <h2>🏰 TOWER DUEL <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">v30</span></h2>
+    <h2>🏰 TOWER DUEL <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">v31</span></h2>
     <div id="sceneSel">
       <button data-scene="forest" class="on">🌲 Forest</button>
       <button data-scene="beach">🏖️ Beach</button>
@@ -169,6 +190,7 @@ const P_MAXCOL=11, B_MINCOL=14;              // 2-player column territories (12-
 // ----- multi-player state -----
 let NP=2;                                    // number of players this match (2 or 3)
 let SIDES=["p","b"];                         // active sides
+const IS_TOUCH = ('ontouchstart' in window) || (navigator.maxTouchPoints>0);
 const SIDE_META={                            // per-side identity (colour, tint) — "c" is the 3rd player
   p:{tint:"rgba(95,205,228,0.06)"}, b:{tint:"rgba(255,107,107,0.06)"}, c:{tint:"rgba(126,231,122,0.06)"},
 };
@@ -2489,6 +2511,8 @@ function setMsgText(t){ document.getElementById("msg").textContent=t; }
 
 // ============================== PATCH NOTES ==============================
     const PATCH_NOTES = [
+  ["v31",["📱 Mobile-friendly! Touch controls: tap a card to pick it (its stats show), then tap the battlefield to place — or press-and-drag to aim the ghost and lift to drop. Tap a card again to deselect.",
+          "Responsive layout: the HUD, toolbar, and buttons resize and re-flow to fit phone screens, with bigger tap targets."]],
   ["v30",["🌐 ONLINE 3-PLAYER: \"Create 3-Player Room\" hosts a match for three real players over the internet. Share the code; once two friends join, the triangular free-for-all begins. Same cards, mechanics, and last-tower-standing rules.",
           "The host relays between both guests; every client runs the same deterministic battle."]],
   ["v29",["🔺 NEW MODE: 3-Player Free-for-All (vs 2 bots) on a big triangular map! Three corner towers (🔵 you, 🔴, 🟢), wedge territories, same cards & mechanics. Last tower standing wins — troops march at the nearest enemy tower.",
@@ -2761,6 +2785,7 @@ for(const [key,k] of Object.entries(KINDS)){
     if(ev.target.classList.contains("up")) return;
     if(b.classList.contains("disabled")) return;
     selected = selected===key?null:key; refreshUI();
+    if(selected===key) showTip(tipFor(key)); else hideTip();   // tap shows stats (touch has no hover)
   };
   b.onmouseenter=()=>showTip(tipFor(key));
   b.onmouseleave=hideTip;
@@ -2879,13 +2904,17 @@ function refreshUI(){
   document.getElementById("msg").style.display = menuOpen ? "none" : "";
   toolbar.classList.toggle("away", !building);
   const msg=document.getElementById("msg");
-  const sideTxt = mySide==="p" ? "left 🔵" : "right 🔴";
-  if(waitingOrders) msg.textContent="⏳ Orders locked in — waiting for your opponent…";
+  const act = IS_TOUCH ? "tap" : "click";
+  const cancelHint = IS_TOUCH ? "Tap the tool again to cancel." : "Right-click to cancel.";
+  const deselectHint = IS_TOUCH ? "Tap the tool again to deselect." : "<kbd>Esc</kbd>/right-click to deselect.";
+  const sideTxt = NP===3 ? (mySide==="p"?"🔵 blue":mySide==="b"?"🔴 red":"🟢 green")
+                         : (mySide==="p" ? "left 🔵" : "right 🔴");
+  if(waitingOrders) msg.textContent="⏳ Orders locked in — waiting for the other players…";
   else if(phase==="battle" && !RT) msg.textContent="⚔️ Battle in progress…";
-  else if(selected==="sell") msg.textContent="💰 SELL MODE — click one of your buildings to sell it for half price. Right-click to cancel.";
-  else if(selected && KINDS[selected].spell) msg.textContent=`Placing ${KINDS[selected].label} — click ANYWHERE on the map. ${RT?"It fires immediately!":"It launches when the battle starts."}`;
-  else if(selected) msg.textContent=`Placing ${KINDS[selected].label} — click a tile on your (${sideTxt}) side. Right-click to cancel.`;
-  else msg.innerHTML=`You are <b>${sideTxt}</b>${RT?" · ⚡ BLITZ — build anytime, income every "+RT_TICK+"s":""}. Troops alive ${troopCount(mySide)}/${TROOP_LIMIT}. <kbd>Esc</kbd>/right-click to deselect.`;
+  else if(selected==="sell") msg.textContent=`💰 SELL MODE — ${act} one of your buildings to sell it for half price. ${cancelHint}`;
+  else if(selected && KINDS[selected].spell) msg.textContent=`Placing ${KINDS[selected].label} — ${act} ANYWHERE on the map. ${RT?"It fires immediately!":"It launches when the battle starts."}`;
+  else if(selected) msg.textContent=`Placing ${KINDS[selected].label} — ${act} a tile on your (${sideTxt}) side. ${cancelHint}`;
+  else msg.innerHTML=`You are <b>${sideTxt}</b>${RT?" · ⚡ BLITZ — build anytime, income every "+RT_TICK+"s":""}. Troops alive ${troopCount(mySide)}/${TROOP_LIMIT}. ${deselectHint}`;
 }
 
 function canvasPos(ev){
@@ -2904,6 +2933,30 @@ cv.addEventListener("click",ev=>{
 });
 cv.addEventListener("contextmenu",ev=>{ ev.preventDefault(); selected=null; refreshUI(); });
 window.addEventListener("keydown",ev=>{ if(ev.key==="Escape"){ selected=null; refreshUI(); } });
+
+// ---- touch: press & drag to aim the ghost, lift to place (mirrors mouse) ----
+function touchPos(t){
+  const r=cv.getBoundingClientRect();
+  const x=(t.clientX-r.left)/r.width*(W+2*PAD)-PAD, y=(t.clientY-r.top)/r.height*(H+2*PAD)-PAD;
+  return {x,y,gx:Math.floor(x/CELL),gy:Math.floor(y/CELL)};
+}
+cv.addEventListener("touchstart",ev=>{
+  ac();                                        // unlock audio on first touch
+  if(ev.touches.length){ hover=touchPos(ev.touches[0]); }
+  ev.preventDefault();
+},{passive:false});
+cv.addEventListener("touchmove",ev=>{
+  if(ev.touches.length){ hover=touchPos(ev.touches[0]); }
+  ev.preventDefault();
+},{passive:false});
+cv.addEventListener("touchend",ev=>{
+  ev.preventDefault();                         // also suppresses the synthetic click (no double-place)
+  if(hover && selected && canBuild()){
+    if(selected==="sell") sellAt(hover.gx,hover.gy);
+    else place(selected,hover.gx,hover.gy);
+  }
+  hover=null;                                  // clear the ghost after lifting
+},{passive:false});
 
 // scene picker: swap the battlefield theme (purely visual)
 document.querySelectorAll("#sceneSel button").forEach(b=>{

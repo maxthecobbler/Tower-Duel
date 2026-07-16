@@ -53,8 +53,15 @@
     flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:5}
   #banner.show{display:flex}
   #banner .big{font-size:2.2em;font-weight:bold;text-shadow:0 3px 12px #000}
+  #banner .bannerBtns{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
   #banner button{background:var(--accent);border:none;border-radius:8px;padding:10px 26px;
     font-family:inherit;font-weight:bold;font-size:1em;cursor:pointer;color:#221a05}
+  #banner button:last-child{background:var(--panel2);color:var(--text);border:2px solid #333a5c}
+  #menuBtn{position:absolute;top:6px;left:8px;z-index:4;background:rgba(14,17,28,.8);
+    border:1px solid #2c3050;border-radius:8px;color:var(--text);font-family:inherit;font-size:.8em;
+    font-weight:bold;padding:5px 10px;cursor:pointer;backdrop-filter:blur(2px)}
+  #menuBtn:hover{border-color:var(--accent)}
+  #menuBtn.hidden{display:none}
   kbd{background:#2c3050;border-radius:4px;padding:1px 5px;font-size:.85em}
   #menu{position:absolute;inset:0;background:rgba(10,12,22,.88);border-radius:8px;z-index:6;
     display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px}
@@ -144,9 +151,15 @@
     <span class="dim three-only">🟢 <b id="cHp" style="color:var(--green)"></b> HP · L<b id="cLv" style="color:var(--green)">1</b></span>
   </div>
   <div id="tip"></div>
-  <div id="banner"><div class="big" id="bannerText"></div><button onclick="bannerAction()">↺ Play Again</button></div>
+  <button id="menuBtn" onclick="quitToMenu()">☰ Menu</button>
+  <div id="banner"><div class="big" id="bannerText"></div>
+    <div class="bannerBtns">
+      <button onclick="bannerAction()">↺ Play Again</button>
+      <button onclick="quitToMenu()">☰ Menu</button>
+    </div>
+  </div>
   <div id="menu">
-    <h2>🏰 TOWER DUEL <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">3.15.10.4</span></h2>
+    <h2>🏰 TOWER DUEL <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">3.15.10.5</span></h2>
     <div id="sceneSel">
       <button data-scene="forest" class="on">🌲 Forest</button>
       <button data-scene="beach">🏖️ Beach</button>
@@ -1346,7 +1359,12 @@ function showBanner(text,color){
 function bannerAction(){
   document.getElementById("banner").classList.remove("show");
   if(mode==="online"){ backToMenu(); }
-  else beginMatch({mode:"bot", rt:RT});
+  else beginMatch({mode:"bot", rt:RT, players:NP});   // Play Again keeps the same player count
+}
+function quitToMenu(){                                 // abandon the current match, return to the menu
+  document.getElementById("banner").classList.remove("show");
+  over=true; phase="over";                             // halt any running battle
+  backToMenu();
 }
 function backToMenu(){
   cleanupNet();
@@ -2543,6 +2561,8 @@ function setMsgText(t){ document.getElementById("msg").textContent=t; }
 
 // ============================== PATCH NOTES ==============================
     const PATCH_NOTES = [
+  ["3.15.10.5",["🏠 Menu button: quit back to the main menu anytime — from the corner during a match, or from the game-over screen.",
+          "Fixed: \"Play Again\" after a 3-player game now starts another 3-player game (it used to drop you into a 2-player match)."]],
   ["3.15.10.4",["🤖 Smarter bot: the vs-Bot AI's decision-making was re-tuned by SELF-PLAY — the bot played thousands of games against itself and kept the settings that won. The new brain beat the old one ~92% of the time. Expect a tougher opponent: a faster economy, prioritized tower upgrades, and relentless soldier pressure."]],
   ["3.14.10.4",["🧭 Troops no longer get stuck behind ponds and groves — when an obstacle blocks the way they veer left along it and keep moving until the path ahead is clear."]],
   ["3.14.10.3",["📱 Mobile-friendly! Touch controls: tap a card to pick it (its stats show), then tap the battlefield to place — or press-and-drag to aim the ghost and lift to drop. Tap a card again to deselect.",
@@ -2935,6 +2955,7 @@ function refreshUI(){
   fightBtn.disabled = phase!=="build" || waitingOrders;
   toolbar.style.display = menuOpen ? "none" : "flex";
   document.getElementById("rangeBar").style.display = menuOpen ? "none" : "flex";
+  document.getElementById("menuBtn").classList.toggle("hidden", menuOpen);
   document.getElementById("msg").style.display = menuOpen ? "none" : "";
   toolbar.classList.toggle("away", !building);
   const msg=document.getElementById("msg");

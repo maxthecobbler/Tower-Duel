@@ -159,7 +159,7 @@
     </div>
   </div>
   <div id="menu">
-    <h2>🏰 TOWER DUEL <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">3.15.10.5</span></h2>
+    <h2>🏰 TOWER DUEL <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">3.16.10.5</span></h2>
     <div id="sceneSel">
       <button data-scene="forest" class="on">🌲 Forest</button>
       <button data-scene="beach">🏖️ Beach</button>
@@ -243,6 +243,7 @@ const KINDS = {
   harvester:{label:"Harvester",icon:"🌾", cost:5,  hp:20,  building:true},
   turret:   {label:"Turret",   icon:"🗼", cost:8,  hp:30,  building:true, range:90, dmg:5, cd:1.4, aoe:22},
   spikes:   {label:"Spikes",   icon:"🪤", cost:7,  hp:1,   building:true, trap:true, dmg:15, rad:14},
+  catapult: {label:"Catapult", icon:"🪨", cost:50, hp:40,  building:true, range:800, cd:10, aoe:26, dmgBuilding:15, dmgTroop:5},
   duck:     {label:"Duck",     icon:"🦆", cost:6,  hp:16,  building:true, water:true, range:70, cd:1.0, slow:1.6, dmg:0.1},
   magicwell:{label:"Mana Well",icon:"🔮", cost:5,  hp:20,  building:true, magicWater:true},
   soldier:  {label:"Soldier",  icon:"⚔️", cost:4,  hp:10,  troop:true, spd:32, range:11, dmg:3, cd:0.7, aggro:60},
@@ -259,6 +260,7 @@ const TECH={
   magicwell:[null,{cost:0,inc:3},              {cost:8, inc:4},              {cost:14,inc:5},              {cost:22,inc:7}],
   turret:   [null,{cost:0,dmg:5,range:90,cd:1.4},{cost:10,dmg:6,range:98,cd:1.2},{cost:18,dmg:8,range:108,cd:1.0},{cost:30,dmg:10,range:120,cd:0.8}],
   spikes:   [null,{cost:0,dmg:15,rad:14},      {cost:8, dmg:20,rad:15},      {cost:14,dmg:26,rad:18},      {cost:22,dmg:33,rad:22}],
+  catapult: [null,{cost:0,cd:10,dmgBuilding:15,dmgTroop:5},{cost:55,cd:7,dmgBuilding:18,dmgTroop:5},{cost:70,cd:5,dmgBuilding:22,dmgTroop:6},{cost:90,cd:3,dmgBuilding:27,dmgTroop:7}],
   duck:     [null,{cost:0,cd:1.0,slow:1.6},    {cost:6, cd:0.8,slow:2.0},    {cost:10,cd:0.65,slow:2.4},   {cost:16,cd:0.5,slow:3.0}],
   soldier:  [null,{cost:0,hp:10,dmg:3,cd:0.7}, {cost:8, hp:13,dmg:4,cd:0.62},{cost:14,hp:16,dmg:5,cd:0.55},{cost:22,hp:20,dmg:6,cd:0.48}],
   archer:   [null,{cost:0,hp:9,dmg:2,cd:0.9,range:66},{cost:8,hp:11,dmg:3,cd:0.8,range:74},{cost:14,hp:13,dmg:4,cd:0.7,range:82},{cost:22,hp:16,dmg:5,cd:0.6,range:92}],
@@ -301,6 +303,7 @@ const TIPS={
   harvester:"20 HP — Earns +3 gold every turn. Its killer loots 25% of its lifetime earnings — but it EXPLODES on death: 12 dmg to all enemies within 2 tiles!",
   turret:"30 HP — Cannonball: 5 splash dmg every 1.4s, range 90.",
   spikes:"Single-use trap. When an enemy troop steps within ~1 tile, hidden spikes erupt for 15 dmg to every foe in the blast, then the trap is spent. Doesn't block movement.",
+  catapult:"40 HP — Siege engine that targets only enemy BUILDINGS, anywhere on the map. Lobs a boulder: 15 dmg to buildings, 5 to troops in the blast. Slow: fires every 10s (down to every 3s fully upgraded). Upgrades cost more than it does to build.",
   duck:"16 HP — Blue water only! Squirts water at enemy troops (range 70): slows them 50% for 1.6s and deals 0.1 dmg. Ferocious.",
   magicwell:"20 HP — Place on a PURPLE magic pond. Harvests +3 🔮 magic every turn (spells cost magic). Its killer loots 25% of its lifetime earnings!",
   soldier:"10 HP — 3 dmg / 0.7s melee. Speed 32, detection 60.",
@@ -694,6 +697,11 @@ function botBuild(side="b", P=BOT_PARAMS){
     }
   }
 
+  // ---- 5b) siege: a catapult behind the lines when flush with gold ----
+  if(mine("catapult").length<1 && turn>=5 && golds[side]>=KINDS.catapult.cost+20){
+    placeNear("catapult", M(24), 5+Math.floor(rnd(-2,3)), 2);
+  }
+
   // ---- 6) attack wave: pick the enemy's weakest row and push ----
   const laneDef=r=>ents.filter(e=>e.side===opp&&e.building&&!e.dead&&Math.abs(e.gy-r)<=1)
     .reduce((s,e)=>s+(e.kind==="turret"?3:e.kind==="tower"?4:1),0);
@@ -768,6 +776,7 @@ function botBuild3(side){
   if(mine("turret").length<Math.min(4,1+Math.floor(turn/3)) && gold()>=KINDS.turret.cost+2) tryPlace("turret");
   if(rnd(0,1)<0.5 && gold()>=KINDS.wall.cost+2) tryPlace("wall");
   if(rnd(0,1)<0.3 && gold()>=KINDS.spikes.cost+2) tryPlace("spikes");
+  if(mine("catapult").length<1 && turn>=5 && gold()>=KINDS.catapult.cost+20) tryPlace("catapult");
   if(tw.level<4 && gold()>=TOWER_LEVELS[tw.level+1].cost+16 && rnd(0,1)<0.5){ golds[side]-=TOWER_LEVELS[tw.level+1].cost; applyUpgrade(side); }
   else if(turn>=2 && rnd(0,1)<0.5){
     const cards=["harvester","turret","soldier","archer"], card=cards[Math.floor(rnd(0,cards.length))];
@@ -796,6 +805,16 @@ function nearestEnemy(e, troopsOnly=false){
     if(d<bd){ bd=d; best=o; }
   }
   return best?{t:best,d:bd}:null;
+}
+// catapult targeting: the nearest enemy BUILDING within range (traps excluded — they're hidden)
+function nearestEnemyBuilding(e, range){
+  let best=null, bd=1e9;
+  for(const o of ents){
+    if(o.dead || o.side===e.side || !o.building || o.kind==="spikes") continue;
+    const d=dist(e,o);
+    if(d<bd){ bd=d; best=o; }
+  }
+  return (best && bd<=range) ? {t:best,d:bd} : null;
 }
 // body radius used for surface-to-surface range checks & collision
 function bodyR(o){ return o.kind==="tower"?15 : o.building?7 : 3; }
@@ -891,6 +910,16 @@ function shoot(e,target,opts){
     side:e.side, dmg:opts.dmg, aoe:opts.aoe||0, color:opts.color, size:opts.size||1.5, life:1.6,
     pkind:opts.pkind||"arrow", slow:opts.slow||0});
   parts.push({x:e.x,y:e.y-(opts.lift||0),vx:0,vy:0,life:.08,t:0,size:3,color:PAL.flash,flash:true});
+  sfx("shoot");
+}
+// catapult: lob a boulder that ARCS over troops and detonates on the targeted building's tile
+function lobBoulder(e,target){
+  const sx=e.x, sy=e.y-6, tx=target.x, ty=target.y, d=hyp(tx-sx,ty-sy)||1, spd=170;
+  projs.push({x:sx, y:sy, vx:(tx-sx)/d*spd, vy:(ty-sy)/d*spd,
+    side:e.side, siege:true, tx, ty, aoe:KINDS.catapult.aoe,
+    dmgB:tstat(e.side,"catapult","dmgBuilding"), dmgT:tstat(e.side,"catapult","dmgTroop"),
+    color:"#a5895f", life:d/spd+0.2, flight:d/spd, t0:0, arc:Math.min(34,d*0.14), pkind:"boulder"});
+  parts.push({x:sx,y:sy,vx:0,vy:0,life:.1,t:0,size:3,color:PAL.flash,flash:true});
   sfx("shoot");
 }
 
@@ -1133,6 +1162,13 @@ function updateBattle(dt){
         }
       }
     }
+    else if(e.kind==="catapult"){
+      const n=nearestEnemyBuilding(e, KINDS.catapult.range);   // sieges enemy buildings anywhere on the map
+      if(n){
+        e.aim=Math.atan2(n.t.y-e.y,n.t.x-e.x);
+        if(e.cd<=0){ e.cd=tstat(e.side,"catapult","cd"); lobBoulder(e,n.t); }
+      }
+    }
     else if(e.kind==="duck"){
       const k=KINDS.duck, n=nearestEnemy(e,true);
       if(n && n.d<=k.range){
@@ -1174,6 +1210,18 @@ function updateBattle(dt){
   // projectiles
   for(const p of projs){
     p.x+=p.vx*dt; p.y+=p.vy*dt; p.life-=dt;
+    if(p.siege){                                   // catapult boulder: arcs over troops, detonates on its target tile
+      p.t0+=dt;
+      if(hyp(p.x-p.tx,p.y-p.ty)<7 || p.life<=0){
+        p.life=0;
+        boom(p.tx,p.ty,"#a5895f",16,true);
+        for(const o of ents){
+          if(o.dead||o.side===p.side) continue;
+          if(hyp(o.x-p.tx,o.y-p.ty)<=p.aoe) damage(o, o.building?p.dmgB:p.dmgT, teamCol(p.side));
+        }
+      }
+      continue;
+    }
     if(Math.random()<.5) parts.push({x:p.x,y:p.y,vx:0,vy:0,life:.15,t:0,size:1,color:p.color});
     let hit=null;
     for(const e of ents){
@@ -2232,6 +2280,21 @@ function drawTurret(e){
   px(e.x-2,e.y-4,4,4,col);
   if(e.hp<e.maxHp) drawHpBar(e,x+2,y-8,12);
 }
+function drawCatapult(e){
+  const x=e.gx*CELL, y=e.gy*CELL, col=teamCol(e.side);
+  // wooden base + wheels
+  px(x+2,y+11,12,3,"#3a2a18"); px(x+2,y+13,2,2,"#241812"); px(x+12,y+13,2,2,"#241812");
+  px(x+3,y+8,10,4,"#6a4a2a"); px(x+3,y+8,10,1,"#8a6a3f");
+  // throwing arm, angled toward the aim; a rock in the bucket
+  const a=e.aim!==undefined?e.aim:(e.side==="p"?0:Math.PI), sw=Math.sin(animT*2+e.x)*0.12;
+  const bx=e.x+Math.cos(a+sw)*6, by=e.y-5+Math.sin(a+sw)*3;
+  ctx.strokeStyle="#7a5a34"; ctx.lineWidth=2; ctx.lineCap="round";
+  ctx.beginPath(); ctx.moveTo(e.x,e.y+3); ctx.lineTo(bx,by); ctx.stroke();
+  ctx.fillStyle="#8a7860"; ctx.beginPath(); ctx.arc(bx,by,2.4,0,7); ctx.fill();
+  px(bx-1,by-1,1,1,"#c3b088");                                      // rock highlight
+  px(e.x-1,y+7,2,1,col);                                            // team band
+  if(e.hp<e.maxHp) drawHpBar(e,x+2,y-6,12);
+}
 function drawTroop(e){
   const me=e.side==="p", body=teamCol(e.side), dark=teamColDark(e.side);
   const bob = Math.floor(e.step)%2 ? 0 : -1;    // walk bob
@@ -2437,6 +2500,7 @@ function render(){
     else if(e.kind==="wall") drawWall(e);
     else if(e.kind==="harvester") drawHarvester(e);
     else if(e.kind==="turret") drawTurret(e);
+    else if(e.kind==="catapult") drawCatapult(e);
     else if(e.kind==="spikes") drawSpikes(e);
     else if(e.kind==="duck") drawDuck(e);
     else if(e.kind==="magicwell") drawMagicWell(e);
@@ -2471,6 +2535,15 @@ function render(){
       ctx.beginPath(); ctx.arc(p.x,p.y,4,0,7); ctx.fill(); ctx.globalAlpha=1;
       ctx.fillStyle="#2b2b33"; ctx.beginPath(); ctx.arc(p.x,p.y,2.5,0,7); ctx.fill();
       px(p.x-1,p.y-1,1,1,"#8a8a99");
+    }
+    else if(p.pkind==="boulder"){
+      // catapult boulder: an arcing rock with a ground shadow beneath it
+      const h = Math.sin(Math.min(1,p.t0/(p.flight||1))*Math.PI)*(p.arc||24);
+      ctx.fillStyle="rgba(0,0,0,.28)"; ctx.beginPath(); ctx.ellipse(p.x,p.y,3.2,1.6,0,0,7); ctx.fill();
+      const by=p.y-h;
+      ctx.fillStyle="#6a5a44"; ctx.beginPath(); ctx.arc(p.x,by,3.4,0,7); ctx.fill();
+      ctx.fillStyle="#9a8763"; ctx.beginPath(); ctx.arc(p.x-0.8,by-0.8,2.1,0,7); ctx.fill();
+      px(p.x-1,by-1,1,1,"#c3b088");
     } else {
       // arrow: shaft along velocity + bright tip
       const m=Math.hypot(p.vx,p.vy)||1, ux=p.vx/m, uy=p.vy/m;
@@ -2561,6 +2634,7 @@ function setMsgText(t){ document.getElementById("msg").textContent=t; }
 
 // ============================== PATCH NOTES ==============================
     const PATCH_NOTES = [
+  ["3.16.10.5",["🪨 NEW CARD: Catapult (💰50) — a siege engine that targets ONLY enemy buildings, anywhere on the map. Lobs a boulder for 15 damage to buildings (5 to troops caught in the blast). Slow: fires every 10s, upgradeable down to every 3s. Upgrades cost more than it does to build (55/70/90)."]],
   ["3.15.10.5",["🏠 Menu button: quit back to the main menu anytime — from the corner during a match, or from the game-over screen.",
           "Fixed: \"Play Again\" after a 3-player game now starts another 3-player game (it used to drop you into a 2-player match)."]],
   ["3.15.10.4",["🤖 Smarter bot: the vs-Bot AI's decision-making was re-tuned by SELF-PLAY — the bot played thousands of games against itself and kept the settings that won. The new brain beat the old one ~92% of the time. Expect a tougher opponent: a faster economy, prioritized tower upgrades, and relentless soldier pressure."]],
@@ -2816,7 +2890,7 @@ function showTip(html){ tipEl.innerHTML=html; tipEl.style.display="block"; }
 function hideTip(){ tipEl.style.display="none"; }
 function techLine(card,lvl){
   const t=TECH[card][lvl], names={hp:"HP",inc:"income/turn",dmg:"dmg",range:"range",cd:"s/atk",slow:"slow(s)",
-    spd:"speed",hps:"HP/s",dmgBuilding:"bldg dmg",radius:"radius",rad:"blast"};
+    spd:"speed",hps:"HP/s",dmgBuilding:"bldg dmg",dmgTroop:"troop dmg",radius:"radius",rad:"blast"};
   return Object.entries(t).filter(([f])=>f!=="cost").map(([f,v])=>`${names[f]||f} ${v}`).join(" · ");
 }
 function tipFor(key){

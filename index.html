@@ -940,8 +940,9 @@ function updateMoneybags(){
   moneybags=moneybags.filter(b=>!b.taken);
 }
 function spawnBag(rand){
-  for(let tries=0;tries<40;tries++){
+  for(let tries=0;tries<60;tries++){
     const gx=Math.floor(rand()*COLS), gy=Math.floor(rand()*ROWS);
+    if(NP===3 && TRI && !pointInTri(cellCx(gx),cellCx(gy),TRI)) continue;   // keep bags inside the triangle
     if(occupied(gx,gy)||blockedCell(gx,gy)||bagAt(gx,gy)) continue;
     moneybags.push({gx,gy,x:cellCx(gx),y:cellCx(gy),val:5+Math.floor(rand()*6)});
     return;
@@ -1513,9 +1514,43 @@ function makeGrove(x,y,rand){
   return {x,y,trees};
 }
 
+// 3-player: obstacles live INSIDE the triangle, placed in 3-fold-symmetric trios (fair for all corners)
+function genObstacles3(rand){
+  const rr=(a,b)=>a+rand()*(b-a);
+  PONDS=[]; GROVES=[]; OBS_CIRCLES=[];
+  const mid=TRI.mid;
+  const rot=(x,y,k)=>{ const a=k*2*Math.PI/3, c=Math.cos(a), s=Math.sin(a);
+    return {x:mid.x+(x-mid.x)*c-(y-mid.y)*s, y:mid.y+(x-mid.x)*s+(y-mid.y)*c}; };
+  const towers=["p","b","c"].map(sd=>{ const dx=mid.x-TRI[sd].x, dy=mid.y-TRI[sd].y, m=hyp(dx,dy)||1;
+    return {x:TRI[sd].x+dx/m*CELL*3, y:TRI[sd].y+dy/m*CELL*3}; });
+  const fits=(x,y,r)=> pointInTri(x,y,TRI)&&pointInTri(x+r,y,TRI)&&pointInTri(x-r,y,TRI)&&pointInTri(x,y+r,TRI)&&pointInTri(x,y-r,TRI);
+  const clearOf=(x,y,r)=>{
+    for(const t of towers) if(hyp(x-t.x,y-t.y)<r+46) return false;
+    for(const p of PONDS)  if(hyp(x-p.x,y-p.y)<r+p.maxR+12) return false;
+    for(const g of GROVES) if(hyp(x-g.x,y-g.y)<r+28) return false;
+    return true;
+  };
+  const placeTrio=(r,make)=>{
+    for(let tries=0;tries<160;tries++){
+      const x=rr(mid.x-W*0.34,mid.x+W*0.34), y=rr(mid.y-H*0.34,mid.y+H*0.34);
+      const pts=[{x,y},rot(x,y,1),rot(x,y,2)];
+      if(pts.every(p=>fits(p.x,p.y,r)&&clearOf(p.x,p.y,r))){ for(const p of pts) make(p.x,p.y); return; }
+    }
+  };
+  { const v=Math.floor(rand()*3); placeTrio(30,(x,y)=>PONDS.push(makePond(x,y,v))); }       // blue pond trio
+  placeTrio(24,(x,y)=>{ const p=makePond(x,y,0); p.magic=true; PONDS.push(p); });           // magic pond trio
+  placeTrio(22,(x,y)=>GROVES.push(makeGrove(x,y,rand)));                                     // grove trio
+  placeTrio(22,(x,y)=>GROVES.push(makeGrove(x,y,rand)));                                     // grove trio
+  for(const p of PONDS){
+    if(p.variant===1){ OBS_CIRCLES.push({x:p.x-14,y:p.y,r:14},{x:p.x,y:p.y,r:15},{x:p.x+14,y:p.y,r:14}); }
+    else { OBS_CIRCLES.push({x:p.x-8,y:p.y,r:15},{x:p.x+8,y:p.y,r:15}); }
+  }
+  for(const g of GROVES) OBS_CIRCLES.push({x:g.x,y:g.y,r:13,g});
+}
 function genObstacles(rand){
   // rand MUST be the seeded generator online — obstacle positions are gameplay
   rand = rand || Math.random;
+  if(NP===3 && TRI){ genObstacles3(rand); return; }
   const rr=(a,b)=>a+rand()*(b-a);
   PONDS=[]; GROVES=[]; OBS_CIRCLES=[];
   const t1={x:CELL,y:6.5*CELL}, t2={x:(COLS-1)*CELL,y:6.5*CELL};

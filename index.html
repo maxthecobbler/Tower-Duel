@@ -74,7 +74,14 @@
   #sceneSel button:hover{opacity:.85}
   #sceneSel button.on{opacity:1;border-color:var(--accent);background:#3a3417}
   #soundRow{display:flex;align-items:center;gap:8px;color:var(--dim);font-size:.85em;margin-bottom:2px}
-  #soundRow input[type=range]{width:150px;accent-color:var(--accent);cursor:pointer}
+  #soundRow input[type=range]{-webkit-appearance:none;appearance:none;width:150px;height:8px;
+    border-radius:5px;background:#333a5c;cursor:pointer;outline:none}
+  #soundRow input[type=range]::-webkit-slider-runnable-track{height:8px;border-radius:5px;background:transparent}
+  #soundRow input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;margin-top:-3px;
+    width:14px;height:14px;border-radius:50%;background:#f4f6fb;border:2px solid var(--accent);cursor:pointer}
+  #soundRow input[type=range]::-moz-range-track{height:8px;border-radius:5px;background:transparent}
+  #soundRow input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;
+    background:#f4f6fb;border:2px solid var(--accent);cursor:pointer}
   #volPct{min-width:34px;text-align:right;color:var(--text)}
   #rangeBar{display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;
     margin-top:8px;width:min(96vw,940px);color:var(--dim);font-size:.85em}
@@ -2618,8 +2625,16 @@ document.querySelectorAll("#rangeBar button").forEach(b=>{
 // sound slider: master volume, remembered across sessions
 {
   const slider=document.getElementById("volSlider"), pct=document.getElementById("volPct");
-  slider.value=Math.round(sndVol*100); pct.textContent=slider.value+"%";
-  slider.oninput=()=>{ setVolume(slider.value/100); pct.textContent=slider.value+"%"; };
+  const THUMB=14;
+  // fill the track up to the THUMB CENTRE (which travels thumb/2 .. width-thumb/2), so the
+  // yellow fill's leading edge always lines up with the thumb instead of racing ahead of it
+  function paintSlider(){
+    const tw=slider.clientWidth||150, frac=(slider.value-slider.min)/(slider.max-slider.min);
+    const pos=(THUMB/2 + frac*(tw-THUMB))/tw*100;
+    slider.style.background=`linear-gradient(to right, var(--accent) 0%, var(--accent) ${pos}%, #333a5c ${pos}%, #333a5c 100%)`;
+  }
+  slider.value=Math.round(sndVol*100); pct.textContent=slider.value+"%"; paintSlider();
+  slider.oninput=()=>{ setVolume(slider.value/100); pct.textContent=slider.value+"%"; paintSlider(); };
   slider.onchange=()=>{ ac(); sfx("place"); };          // audible preview on release
 }
 

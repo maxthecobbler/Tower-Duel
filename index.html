@@ -146,7 +146,7 @@
   <div id="tip"></div>
   <div id="banner"><div class="big" id="bannerText"></div><button onclick="bannerAction()">↺ Play Again</button></div>
   <div id="menu">
-    <h2>🏰 TOWER DUEL <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">3.14.10.3</span></h2>
+    <h2>🏰 TOWER DUEL <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">3.14.10.4</span></h2>
     <div id="sceneSel">
       <button data-scene="forest" class="on">🌲 Forest</button>
       <button data-scene="beach">🏖️ Beach</button>
@@ -1064,9 +1064,7 @@ function updateBattle(dt){
       if(n){
         if(e.kind==="archer") e.aim=Math.atan2(n.t.y-e.y, n.t.x-e.x);   // face what it's shooting
         if(n.bag || n.d>range){                   // bags are walked to (picked up on contact), never attacked
-          const d=dist(e,n.t)||1;
-          e.x+=(n.t.x-e.x)/d*spd*dt;
-          e.y+=(n.t.y-e.y)/d*spd*dt;
+          moveToward(e,n.t.x,n.t.y,spd,dt);        // steers left around ponds/groves in the way
           e.step+=dt*10;
           collideObstacles(e); collideBuildings(e);
           e.x=Math.max(4,Math.min(W-4,e.x)); e.y=Math.max(4,Math.min(H-4,e.y));
@@ -1091,9 +1089,7 @@ function updateBattle(dt){
           if(tower && Math.abs(tower.x-e.x)<70){ tx=tower.x; ty=tower.y; }
         }
         if(e.kind==="archer") e.aim=Math.atan2(ty-e.y, tx-e.x);         // face the march direction
-        const d=hyp(tx-e.x,ty-e.y)||1;
-        e.x+=(tx-e.x)/d*spd*dt;
-        e.y+=(ty-e.y)/d*spd*dt;
+        moveToward(e,tx,ty,spd,dt);                // steers left around ponds/groves in the way
         e.step+=dt*10;
         collideObstacles(e); collideBuildings(e);
         e.x=Math.max(4,Math.min(W-4,e.x)); e.y=Math.max(4,Math.min(H-4,e.y));
@@ -1641,6 +1637,29 @@ function collideObstacles(e){
     const dx=e.x-o.x, dy=e.y-o.y, d=hyp(dx,dy);
     if(d<o.r && d>0.001){ e.x=o.x+dx/d*o.r; e.y=o.y+dy/d*o.r; }
   }
+}
+// is the point `probe` ahead of e (heading `ang`) clear of every obstacle?
+function dirClear(e,ang,probe){
+  const nx=e.x+Math.cos(ang)*probe, ny=e.y+Math.sin(ang)*probe;
+  for(const o of OBS_CIRCLES){
+    if(o.g && !groveAlive(o.g)) continue;
+    if(hyp(nx-o.x,ny-o.y) < o.r + bodyR(e) + 1) return false;
+  }
+  return true;
+}
+// walk toward (tx,ty); if a pond/grove blocks the way, veer LEFT until the path ahead is clear
+function moveToward(e,tx,ty,spd,dt){
+  const base=Math.atan2(ty-e.y,tx-e.x), probe=12;
+  let ang=base;
+  if(!dirClear(e,base,probe)){
+    for(let i=1;i<=9;i++){                          // sweep left in 18° steps (up to ~160°)
+      const a=base - i*(Math.PI/10);
+      if(dirClear(e,a,probe)){ ang=a; break; }
+      ang=a;
+    }
+  }
+  e.x+=Math.cos(ang)*spd*dt;
+  e.y+=Math.sin(ang)*spd*dt;
 }
 
 function tracePond(p,scale,dy){
@@ -2512,6 +2531,7 @@ function setMsgText(t){ document.getElementById("msg").textContent=t; }
 
 // ============================== PATCH NOTES ==============================
     const PATCH_NOTES = [
+  ["3.14.10.4",["🧭 Troops no longer get stuck behind ponds and groves — when an obstacle blocks the way they veer left along it and keep moving until the path ahead is clear."]],
   ["3.14.10.3",["📱 Mobile-friendly! Touch controls: tap a card to pick it (its stats show), then tap the battlefield to place — or press-and-drag to aim the ghost and lift to drop. Tap a card again to deselect.",
           "Responsive layout: the HUD, toolbar, and buttons resize and re-flow to fit phone screens, with bigger tap targets."]],
   ["3.13.10.3",["🌐 ONLINE 3-PLAYER: \"Create 3-Player Room\" hosts a match for three real players over the internet. Share the code; once two friends join, the triangular free-for-all begins. Same cards, mechanics, and last-tower-standing rules.",

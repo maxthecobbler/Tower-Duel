@@ -7,7 +7,7 @@
 <style>
   :root {
     --bg:#141420; --panel:#1c1e2e; --panel2:#252840; --accent:#ffd75e;
-    --you:#5fcde4; --bot:#ff6b6b; --text:#e8edf5; --dim:#8a93ad; --good:#6ee77a;
+    --you:#5fcde4; --bot:#ff6b6b; --green:#7ee77a; --text:#e8edf5; --dim:#8a93ad; --good:#6ee77a;
   }
   *{box-sizing:border-box;margin:0;padding:0}
   body{background:var(--bg);color:var(--text);font-family:"Segoe UI",system-ui,sans-serif;
@@ -89,6 +89,8 @@
     font-family:inherit;font-size:.85em;padding:4px 12px;cursor:pointer;opacity:.7;transition:all .1s}
   #rangeBar button:hover{opacity:1;border-color:var(--accent)}
   #rangeBar button.on{opacity:1;border-color:var(--accent);background:#3a3417}
+  .three-only{display:none}
+  body.three .three-only{display:inline}
   #notes{position:absolute;inset:0;background:rgba(10,12,22,.96);border-radius:8px;z-index:7;
     display:none;flex-direction:column;padding:14px 18px}
   #notes.show{display:flex}
@@ -118,11 +120,12 @@
     <span class="dim">+<span id="magicIncLbl">0</span><span id="magicIncUnit">/turn</span></span>
     <span class="dim">🔵 <b id="pHp" style="color:var(--you)"></b> HP · L<b id="pLv" style="color:var(--you)">1</b></span>
     <span class="dim">🔴 <b id="bHp" style="color:var(--bot)"></b> HP · L<b id="bLv" style="color:var(--bot)">1</b></span>
+    <span class="dim three-only">🟢 <b id="cHp" style="color:var(--green)"></b> HP · L<b id="cLv" style="color:var(--green)">1</b></span>
   </div>
   <div id="tip"></div>
   <div id="banner"><div class="big" id="bannerText"></div><button onclick="bannerAction()">↺ Play Again</button></div>
   <div id="menu">
-    <h2>🏰 TOWER DUEL <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">v28</span></h2>
+    <h2>🏰 TOWER DUEL <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">v29</span></h2>
     <div id="sceneSel">
       <button data-scene="forest" class="on">🌲 Forest</button>
       <button data-scene="beach">🏖️ Beach</button>
@@ -131,6 +134,7 @@
     <div id="soundRow">🔊 <input id="volSlider" type="range" min="0" max="100" value="70"><span id="volPct">70%</span></div>
     <button onclick="menuBot()">🤖 Play vs Bot (turn-based)</button>
     <button onclick="menuBlitz()">⚡ Blitz vs Bot (real-time!)</button>
+    <button onclick="menu3()">🔺 3-Player Free-for-All (vs 2 Bots)</button>
     <button onclick="menuCreate()">🔒 Create Private Room</button>
     <div class="joinrow">
       <input id="joinCode" maxlength="4" placeholder="CODE">
@@ -158,8 +162,41 @@
 "use strict";
 
 // ============================== CONSTANTS ==============================
-const CELL=16, COLS=26, ROWS=13, W=COLS*CELL, H=ROWS*CELL, PAD=16;
-const P_MAXCOL=11, B_MINCOL=14;              // territories (12-13 = no man's land)
+const CELL=16, PAD=16;
+let COLS=26, ROWS=13, W=COLS*CELL, H=ROWS*CELL;   // map size (mutable: 3-player uses a bigger board)
+const P_MAXCOL=11, B_MINCOL=14;              // 2-player column territories (12-13 = no man's land)
+// ----- multi-player state -----
+let NP=2;                                    // number of players this match (2 or 3)
+let SIDES=["p","b"];                         // active sides
+const SIDE_META={                            // per-side identity (colour, tint) — "c" is the 3rd player
+  p:{tint:"rgba(95,205,228,0.06)"}, b:{tint:"rgba(255,107,107,0.06)"}, c:{tint:"rgba(126,231,122,0.06)"},
+};
+// triangle geometry for 3-player mode (field-space pixel coords), rebuilt in setMap
+let TRI=null;
+function triCentroid(t){ return {x:(t.p.x+t.b.x+t.c.x)/3, y:(t.p.y+t.b.y+t.c.y)/3}; }
+function pointInTri(px,py,t){                 // barycentric inside-test
+  const {p,b,c}=t, d=(b.y-c.y)*(p.x-c.x)+(c.x-b.x)*(p.y-c.y);
+  const a=((b.y-c.y)*(px-c.x)+(c.x-b.x)*(py-c.y))/d;
+  const bb=((c.y-p.y)*(px-c.x)+(p.x-c.x)*(py-c.y))/d;
+  const cc=1-a-bb;
+  return a>=-0.02 && bb>=-0.02 && cc>=-0.02;
+}
+function nearestVertexSide(px,py,t){          // which player's wedge a point falls in (Voronoi of the 3 corners)
+  let best="p", bd=1e9;
+  for(const s of ["p","b","c"]){ const d=hyp(px-t[s].x,py-t[s].y); if(d<bd){ bd=d; best=s; } }
+  return best;
+}
+function setMap(cols,rows){
+  COLS=cols; ROWS=rows; W=COLS*CELL; H=ROWS*CELL;
+  const cv=document.getElementById("cv");
+  if(cv){ cv.width=W+2*PAD; cv.height=H+2*PAD; if(typeof ctx!=="undefined" && ctx) ctx.imageSmoothingEnabled=false; }
+  if(NP===3){
+    TRI={ p:{x:CELL*1.4, y:H-CELL*1.4},      // bottom-left = you (blue)
+          b:{x:W-CELL*1.4, y:H-CELL*1.4},    // bottom-right = red
+          c:{x:W/2, y:CELL*1.4} };           // apex = green
+    TRI.mid=triCentroid(TRI);
+  } else TRI=null;
+}
 const TOWER_HP=200, START_GOLD=14, BASE_INCOME=8, HARVEST_INCOME=3;
 const START_MAGIC=5, BASE_MAGIC=1;
 const BATTLE_MAX=15;                          // seconds per battle phase
@@ -242,9 +279,13 @@ const PAL = {
   forest:"#22331f", canopyDark:"#1d2b1a", canopy:"#2e4a26", canopyLite:"#40633a",
   pTint:"rgba(95,205,228,0.06)", bTint:"rgba(255,107,107,0.06)",
   you:"#5fcde4", youDark:"#2e7ea6", bot:"#ff6b6b", botDark:"#a63838",
+  green:"#7ee77a", greenDark:"#3a9a48",           // 3rd player
   stone:"#9aa7c0", stoneDark:"#5c6787", gold:"#ffd75e", grass:"#3d5a45",
   white:"#f4f6fb", flash:"#fff7d6",
 };
+// team colours by side ("c" = 3rd player, green)
+function teamCol(side){ return side==="p"?PAL.you : side==="b"?PAL.bot : PAL.green; }
+function teamColDark(side){ return side==="p"?PAL.youDark : side==="b"?PAL.botDark : PAL.greenDark; }
 
 // ============================== STATE ==============================
 let ents=[], projs=[], parts=[], texts=[];
@@ -318,6 +359,13 @@ function occupied(gx,gy){ return ents.some(e=>e.building && !e.dead && !e.sellin
   gx>=e.gx && gx<e.gx+(e.gw||1) && gy>=e.gy && gy<e.gy+(e.gh||1)); }
 
 function makeTower(side){
+  if(NP===3 && TRI){
+    const v=TRI[side], dx=TRI.mid.x-v.x, dy=TRI.mid.y-v.y, m=hyp(dx,dy)||1;
+    const tx=v.x+dx/m*CELL*3, ty=v.y+dy/m*CELL*3;      // sit inside from the sharp corner, room to build around
+    const gx=Math.round(tx/CELL)-1, gy=Math.round(ty/CELL)-1;
+    return {side, kind:"tower", building:true, gx, gy, gw:2, gh:2, level:1,
+      x:tx, y:ty, hp:TOWER_HP, maxHp:TOWER_HP, cd:0};
+  }
   const gx = side==="p" ? 0 : COLS-2;
   return {side, kind:"tower", building:true, gx, gy:5, gw:2, gh:3, level:1,
     x:gx*CELL+CELL, y:5*CELL+CELL*1.5, hp:TOWER_HP, maxHp:TOWER_HP, cd:0};
@@ -347,6 +395,16 @@ function makeTroop(side,kind,x,y){
 function income(side){ return BASE_INCOME + tstat(side,"harvester","inc")*ents.filter(e=>e.side===side&&e.kind==="harvester").length; }
 function magicIncome(side){ return BASE_MAGIC + tstat(side,"magicwell","inc")*ents.filter(e=>e.side===side&&e.kind==="magicwell").length; }
 function troopsAlive(side){ return ents.some(e=>e.troop && e.side===side); }
+function anyTroopsAlive(){ return ents.some(e=>e.troop && !e.dead); }
+function nearestEnemyTower(e){
+  let best=null, bd=1e9;
+  for(const o of ents){
+    if(o.dead || o.kind!=="tower" || o.side===e.side) continue;
+    const d=hyp(o.x-e.x,o.y-e.y); if(d<bd){ bd=d; best=o; }
+  }
+  return best;
+}
+function aliveSides(){ return SIDES.filter(s=>{ const t=towerOf(s); return t && !t.dead && t.hp>0; }); }
 
 // ============================== PARTICLES / VFX ==============================
 function boom(x,y,color,n=14,big=false){
@@ -373,10 +431,16 @@ function spikePop(x,y,color){                        // spikes bursting up out o
 }
 
 // ============================== PLACEMENT ==============================
-function inTerritory(side,gx){ return side==="p" ? gx>=0&&gx<=P_MAXCOL : gx>=B_MINCOL&&gx<COLS; }
+function inTerritory(side,gx,gy){
+  if(NP===3 && TRI){                              // 3-player: your wedge of the triangle (Voronoi of the corners)
+    const cx=cellCx(gx), cy=cellCx(gy);
+    return pointInTri(cx,cy,TRI) && nearestVertexSide(cx,cy,TRI)===side;
+  }
+  return side==="p" ? gx>=0&&gx<=P_MAXCOL : gx>=B_MINCOL&&gx<COLS;
+}
 function bagAt(gx,gy){ return moneybags.some(b=>b.gx===gx && b.gy===gy); }
 function validSpot(side,gx,gy,kind){
-  if(!inTerritory(side,gx) || gy<0 || gy>=ROWS) return false;
+  if(!inTerritory(side,gx,gy) || gy<0 || gy>=ROWS) return false;
   if(occupied(gx,gy) || bagAt(gx,gy)) return false;
   const pond=pondAt(gx,gy);
   if(kind==="duck")      return !!pond && !pond.magic;   // ducks live on BLUE water
@@ -635,6 +699,44 @@ function botBuild(){
   if(golds.b>=KINDS.soldier.cost+10) placeNear("soldier",15,lane,2);
 }
 
+// simpler free-for-all bot for the triangular 3-player board (one call per bot side)
+function botBuild3(side){
+  const tw=towerOf(side); if(!tw || tw.dead) return;
+  const mine=k=>ents.filter(e=>e.side===side&&e.kind===k&&!e.dead);
+  const gold=()=>golds[side];
+  const tryPlace=(kind)=>{
+    const k=KINDS[kind]; if(gold()<k.cost) return false;
+    for(let i=0;i<40;i++){                            // random cell in a ring around the bot's tower
+      const ang=rnd(0,Math.PI*2), rad=rnd(CELL*1.5,CELL*8);
+      const gx=Math.round((tw.x+Math.cos(ang)*rad)/CELL-0.5), gy=Math.round((tw.y+Math.sin(ang)*rad)/CELL-0.5);
+      if(kind==="duck"||kind==="magicwell"){ const p=pondAt(gx,gy); if(!p||((kind==="duck")===!!p.magic)) continue; }
+      if(validSpot(side,gx,gy,kind)){ golds[side]-=k.cost; spawn(side,kind,gx,gy); puff(cellCx(gx),cellCx(gy),teamCol(side),8); return true; }
+    }
+    return false;
+  };
+  if(mine("harvester").length<Math.min(6,2+Math.floor(turn/2)) && gold()>=KINDS.harvester.cost+3) tryPlace("harvester");
+  if(mine("magicwell").length<1 && gold()>=KINDS.magicwell.cost) tryPlace("magicwell");
+  if(mine("turret").length<Math.min(4,1+Math.floor(turn/3)) && gold()>=KINDS.turret.cost+2) tryPlace("turret");
+  if(rnd(0,1)<0.5 && gold()>=KINDS.wall.cost+2) tryPlace("wall");
+  if(rnd(0,1)<0.3 && gold()>=KINDS.spikes.cost+2) tryPlace("spikes");
+  if(tw.level<4 && gold()>=TOWER_LEVELS[tw.level+1].cost+16 && rnd(0,1)<0.5){ golds[side]-=TOWER_LEVELS[tw.level+1].cost; applyUpgrade(side); }
+  else if(turn>=2 && rnd(0,1)<0.5){
+    const cards=["harvester","turret","soldier","archer"], card=cards[Math.floor(rnd(0,cards.length))];
+    if(techLvl(side,card)<4){ const c=TECH[card][techLvl(side,card)+1].cost; if(gold()>=c+10){ golds[side]-=c; applyTech(side,card); } }
+  }
+  // attack wave: troops spawn just outside the tower, aimed at the field centre → they march at the nearest enemy tower
+  const dx=TRI.mid.x-tw.x, dy=TRI.mid.y-tw.y, m=hyp(dx,dy)||1;
+  const troopKinds = turn>4 ? ["soldier","archer","brute"] : ["soldier","archer"];
+  let guard=0;
+  while(troopCount(side)<TROOP_LIMIT && guard++<6){
+    const kind=troopKinds[Math.floor(rnd(0,troopKinds.length))];
+    if(gold()<KINDS[kind].cost || (gold()<10 && rnd(0,1)<0.5)) break;
+    const off=CELL*(2+rnd(0,1.5));
+    const gx=Math.round((tw.x+dx/m*off+rnd(-6,6))/CELL-0.5), gy=Math.round((tw.y+dy/m*off+rnd(-6,6))/CELL-0.5);
+    golds[side]-=KINDS[kind].cost; spawn(side,kind,gx,gy); puff(cellCx(gx),cellCx(gy),teamCol(side),6);
+  }
+}
+
 // ============================== COMBAT SIM ==============================
 function nearestEnemy(e, troopsOnly=false){
   let best=null, bd=1e9;
@@ -690,7 +792,7 @@ function damage(target,dmg,srcColor){
   floatText(target.x+rnd(-3,3), target.y-8, "-"+dmg, srcColor);
   if(target.hp<=0){
     const big = target.kind==="tower"||target.kind==="brute";
-    boom(target.x,target.y, target.side==="p"?PAL.you:PAL.bot, big?22:12, big);
+    boom(target.x,target.y, teamCol(target.side), big?22:12, big);
     target.dead=true;
     // harvester/mana well bounty: killer loots 25% of its lifetime earnings (in its currency)
     if(target.kind==="harvester"||target.kind==="magicwell"){
@@ -720,7 +822,10 @@ function damage(target,dmg,srcColor){
         if(hyp(o.x-target.x,o.y-target.y) <= 32+bodyR(o)) damage(o,12,"#ffd75e");
       }
     }
-    if(target.kind==="tower") endGame(target.side==="b");
+    if(target.kind==="tower"){
+      if(NP===3) eliminatePlayer(target.side);
+      else endGame(target.side==="b");
+    }
   }
 }
 function shoot(e,target,opts){
@@ -943,17 +1048,23 @@ function updateBattle(dt){
         } else if(e.cd<=0){
           e.cd=tstat(e.side,e.kind,"cd");
           const dmg=tstat(e.side,e.kind,"dmg");
-          if(e.kind==="archer") shoot(e,n.t,{dmg,color:e.side==="p"?PAL.you:PAL.bot,spd:150});
+          if(e.kind==="archer") shoot(e,n.t,{dmg,color:teamCol(e.side),spd:150});
           else {
-            damage(n.t,dmg, e.side==="p"?PAL.you:PAL.bot);
+            damage(n.t,dmg, teamCol(e.side));
             puff(n.t.x,n.t.y,PAL.white,3);
           }
         }
       } else {
-        // nothing detected: march forward; home in on the tower once near its column
-        const tower=ents.find(o=>o.kind==="tower" && o.side!==e.side && !o.dead);
-        let tx=e.x+(e.side==="p"?100:-100), ty=e.y;
-        if(tower && Math.abs(tower.x-e.x)<70){ tx=tower.x; ty=tower.y; }
+        // nothing detected: head for an enemy tower
+        let tx, ty;
+        if(NP===3){                                    // triangle: make straight for the nearest enemy tower
+          const tw=nearestEnemyTower(e);
+          tx = tw?tw.x:e.x; ty = tw?tw.y:e.y;
+        } else {                                        // 2-player: march forward, home in near the tower's column
+          const tower=ents.find(o=>o.kind==="tower" && o.side!==e.side && !o.dead);
+          tx=e.x+(e.side==="p"?100:-100); ty=e.y;
+          if(tower && Math.abs(tower.x-e.x)<70){ tx=tower.x; ty=tower.y; }
+        }
         if(e.kind==="archer") e.aim=Math.atan2(ty-e.y, tx-e.x);         // face the march direction
         const d=hyp(tx-e.x,ty-e.y)||1;
         e.x+=(tx-e.x)/d*spd*dt;
@@ -992,7 +1103,7 @@ function updateBattle(dt){
       let armed=false;
       for(const o of ents){ if(!o.dead && o.troop && o.side!==e.side && dist(e,o)<=rad){ armed=true; break; } }
       if(armed){
-        const dmg=tstat(e.side,"spikes","dmg"), col=e.side==="p"?PAL.you:PAL.bot;
+        const dmg=tstat(e.side,"spikes","dmg"), col=teamCol(e.side);
         for(const o of ents) if(!o.dead && o.troop && o.side!==e.side && dist(e,o)<=rad) damage(o,dmg,col);
         floatText(e.x,e.y-10,"SPIKES!",col);
         spikePop(e.x,e.y,col);
@@ -1008,7 +1119,7 @@ function updateBattle(dt){
         if(targets.length){
           e.cd=L.cd;
           for(const t of targets)
-            shoot(e,t,{dmg:L.dmg,color:e.side==="p"?PAL.you:PAL.bot,spd:140,lift:14});
+            shoot(e,t,{dmg:L.dmg,color:teamCol(e.side),spd:140,lift:14});
         }
       }
     }
@@ -1043,10 +1154,10 @@ function updateBattle(dt){
         boom(p.x,p.y,PAL.gold,12);
         for(const e of ents){
           if(e.dead||e.side===p.side) continue;
-          if(dist(e,p)<=p.aoe) damage(e,p.dmg, p.side==="p"?PAL.you:PAL.bot);
+          if(dist(e,p)<=p.aoe) damage(e,p.dmg, teamCol(p.side));
         }
       } else {
-        damage(hit,p.dmg, p.side==="p"?PAL.you:PAL.bot);
+        damage(hit,p.dmg, teamCol(p.side));
         puff(p.x,p.y,p.color,4);
       }
     }
@@ -1055,14 +1166,13 @@ function updateBattle(dt){
   projs=projs.filter(p=>p.life>0);
   ents=ents.filter(e=>!e.dead);
 
-  if(!RT && !over && fireballs.length===0 && (battleT>BATTLE_MAX || (!troopsAlive("p") && !troopsAlive("b")))) endBattle();
+  if(!RT && !over && fireballs.length===0 && (battleT>BATTLE_MAX || !anyTroopsAlive())) endBattle();
 }
 
 function endBattle(){
   phase="build"; turn++;
-  const incMe=income(mySide), incOpp=income(oppSide);
-  golds[mySide]+=incMe; golds[oppSide]+=incOpp;
-  magics.p+=magicIncome("p"); magics.b+=magicIncome("b");
+  const incMe=income(mySide);
+  for(const s of SIDES){ golds[s]+=income(s); magics[s]+=magicIncome(s); }
   // shield bubbles wear off at the end of the turn
   for(const e of ents) e.shield=0;
   for(const e of ents) if(e.kind==="magicwell") puff(e.x,e.y-4,"#c9a0ff",4);
@@ -1098,7 +1208,8 @@ function startBattle(){
     return;                       // battle starts when both players have committed
   }
   selected=null;
-  botBuild();
+  if(NP===3){ for(const s of SIDES) if(s!==mySide) botBuild3(s); }
+  else botBuild();
   launchSpells();
   phase="battle"; battleT=0;
   refreshUI();
@@ -1153,7 +1264,7 @@ function resolveOrders(data){
       else if(validSpot(side,o.gx,o.gy,o.kind)){
         golds[side]-=KINDS[o.kind].cost;
         spawn(side,o.kind,o.gx,o.gy);
-        puff(cellCx(o.gx),cellCx(o.gy), side==="p"?PAL.you:PAL.bot, 8);
+        puff(cellCx(o.gx),cellCx(o.gy), teamCol(side), 8);
       }
     }
   ents=ents.filter(e=>!e.dead);                 // sold buildings leave the field
@@ -1166,6 +1277,25 @@ function endGame(pSideWon){                     // true = side "p" tower fell? n
   over=true; phase="over";
   const b=document.getElementById("banner"), t=document.getElementById("bannerText");
   const iWon = (pSideWon && mySide==="p") || (!pSideWon && mySide==="b");
+  t.textContent = iWon ? "🎉 VICTORY!" : "💀 DEFEAT";
+  t.style.color = iWon ? "var(--good)" : "var(--bot)";
+  setTimeout(()=>b.classList.add("show"), 900);
+  refreshUI();
+}
+const SIDE_NAME={p:"Blue",b:"Red",c:"Green"};
+function eliminatePlayer(side){
+  if(!SIDES.includes(side)) return;
+  SIDES=SIDES.filter(s=>s!==side);
+  for(const e of ents) if(!e.dead && e.side===side && e.kind!=="tower"){ e.dead=true; puff(e.x,e.y,teamCol(side),4); }
+  ents=ents.filter(e=>!e.dead);
+  floatText(W/2, 40, SIDE_NAME[side]+" is out!", teamCol(side));
+  const alive=aliveSides();
+  if(alive.length<=1 || side===mySide) endGame3(alive.length===1?alive[0]:null);
+}
+function endGame3(winner){                       // 3-player: last tower standing wins
+  over=true; phase="over";
+  const b=document.getElementById("banner"), t=document.getElementById("bannerText");
+  const iWon = winner===mySide;
   t.textContent = iWon ? "🎉 VICTORY!" : "💀 DEFEAT";
   t.style.color = iWon ? "var(--good)" : "var(--bot)";
   setTimeout(()=>b.classList.add("show"), 900);
@@ -1193,20 +1323,25 @@ function backToMenu(){
 function beginMatch(opts){
   mode=opts.mode; mySide=opts.side||"p"; oppSide=mySide==="p"?"b":"p";
   RT=!!opts.rt; rtT=0;
+  NP = opts.players===3 ? 3 : 2;
+  SIDES = NP===3 ? ["p","b","c"] : ["p","b"];
+  setMap(NP===3 ? 34 : 26, NP===3 ? 30 : 13);      // 3-player uses a bigger, taller board for the triangle
+  regenDecor();                                     // battlefield tufts/flowers + border for the current size
   const seed = opts.seed!==undefined ? opts.seed : Math.floor(Math.random()*2**31);
   simRand=mulberry32(seed);
   genObstacles(simRand);
-  ents=[makeTower("p"),makeTower("b")]; projs=[]; parts=[]; texts=[]; myOrders=[];
+  ents=SIDES.map(makeTower); projs=[]; parts=[]; texts=[]; myOrders=[];
   spellsQueued=[]; myMarkers=[]; fireballs=[]; scorches=[];
   fires=[]; healZones=[]; moneybags=[]; upgradeQueued=false; pendingTech={};
-  techs={p:{},b:{}};
+  techs={}; golds={}; magics={};
+  for(const s of SIDES){ techs[s]={}; golds[s]=START_GOLD; magics[s]=START_MAGIC; }
   spawnBag(simRand); spawnBag(simRand);           // two bags on the fresh battlefield
-  golds={p:START_GOLD,b:START_GOLD};
-  magics={p:START_MAGIC,b:START_MAGIC};
+  if(NP===3) spawnBag(simRand);                    // an extra bag for the larger board
   turn=1; phase=RT?"battle":"build"; battleT=0; over=false; selected=null; waitingOrders=false;
   menuOpen=false;
   document.getElementById("menu").classList.add("hidden");
   document.getElementById("banner").classList.remove("show");
+  document.body.classList.toggle("three", NP===3);
   refreshUI();
 }
 
@@ -1613,7 +1748,7 @@ function drawManaGeode(e){                          // mountains: a cracked rock
   }
 }
 function drawMagicWell(e){
-  const me=e.side==="p", team=me?PAL.you:PAL.bot;
+  const me=e.side==="p", team=teamCol(e.side);
   const bob=Math.sin(animT*2+e.x)*0.8;
   if(SCENE.well==="clam")       drawManaClam(e);
   else if(SCENE.well==="geode") drawManaGeode(e);
@@ -1629,7 +1764,7 @@ function drawMagicWell(e){
   if(e.hp<e.maxHp) drawHpBar(e,e.x-6,e.y-16,12);
 }
 function drawGoat(e){
-  const me=e.side==="p", team=me?PAL.you:PAL.bot, dir=me?1:-1;
+  const me=e.side==="p", team=teamCol(e.side), dir=me?1:-1;
   const bob=Math.sin(animT*2.4+e.x)*0.6, y=e.y+bob;
   px(e.x-2,y+2,1,3,"#9a917d"); px(e.x+2,y+2,1,3,"#9a917d");                          // legs
   ctx.fillStyle="#d8d2c4"; ctx.beginPath(); ctx.ellipse(e.x,y,4.6,3.2,0,0,7); ctx.fill();      // body
@@ -1645,7 +1780,7 @@ function drawGoat(e){
   if(e.hp<e.maxHp) drawHpBar(e,e.x-6,y-12,12);
 }
 function drawCrab(e){
-  const me=e.side==="p", team=me?PAL.you:PAL.bot;
+  const me=e.side==="p", team=teamCol(e.side);
   const bob=Math.sin(animT*3+e.x)*0.5, y=e.y+bob, wig=Math.sin(animT*8+e.x)*0.6;
   ctx.strokeStyle="#c24a28"; ctx.lineWidth=1;                                        // legs
   for(let i=-1;i<=1;i++){
@@ -1664,7 +1799,7 @@ function drawCrab(e){
 function drawDuck(e){
   if(SCENE.unit.sprite==="goat"){ drawGoat(e); return; }
   if(SCENE.unit.sprite==="crab"){ drawCrab(e); return; }
-  const me=e.side==="p", team=me?PAL.you:PAL.bot;
+  const me=e.side==="p", team=teamCol(e.side);
   const bob=Math.sin(animT*2.4+e.x)*1.2;
   const y=e.y+bob;
   // ripples
@@ -1685,7 +1820,7 @@ function drawDuck(e){
   if(e.hp<e.maxHp) drawHpBar(e,e.x-6,y-14,12);
 }
 function drawSpikes(e){
-  const me=e.side==="p", team=me?PAL.you:PAL.bot;
+  const me=e.side==="p", team=teamCol(e.side);
   // faint team-tinted ring marks it as your trap without shouting
   ctx.globalAlpha=.28; ctx.strokeStyle=team; ctx.lineWidth=1;
   ctx.beginPath(); ctx.ellipse(e.x,e.y,7.5,5,0,0,7); ctx.stroke(); ctx.globalAlpha=1;
@@ -1768,20 +1903,38 @@ function drawStatusFx(){
 
 // deterministic battlefield decoration (tufts, flowers, pebbles) + border forest
 let decor=[], trees=[];
-(function initDecor(){
+function regenDecor(){
+  decor=[]; trees=[];
   let s=1337; const rand=()=>{ s=(s*1103515245+12345)&0x7fffffff; return s/0x7fffffff; };
-  for(let i=0;i<90;i++){
+  const density=Math.round(90*(W*H)/(26*13*CELL*CELL));   // scale scatter with board area
+  for(let i=0;i<density;i++){
     const r=rand();
     decor.push({x:Math.floor(rand()*W), y:Math.floor(rand()*H),
       type: r<.5?"tuft" : r<.68?"flower" : r<.85?"pebble" : "dirt",
       c: rand()});
+  }
+  if(NP===3 && TRI){
+    // border trees hug the three edges of the triangle
+    const edges=[[TRI.p,TRI.b],[TRI.b,TRI.c],[TRI.c,TRI.p]];
+    for(const [a,b] of edges){
+      const len=hyp(b.x-a.x,b.y-a.y), n=Math.floor(len/13);
+      for(let i=0;i<=n;i++){
+        const f=i/n, x=a.x+(b.x-a.x)*f, y=a.y+(b.y-a.y)*f;
+        // push each tree slightly OUTWARD from the centroid so they frame the field
+        const ox=x-TRI.mid.x, oy=y-TRI.mid.y, m=hyp(ox,oy)||1;
+        trees.push({x:x+ox/m*7+rand()*4-2, y:y+oy/m*7+rand()*4-2, r:5+rand()*4,
+          variant:Math.floor(rand()*4), seed:rand()});
+      }
+    }
+    return;
   }
   const spots=[];
   for(let x=-PAD/2;x<W+PAD;x+=13){ spots.push([x,-PAD/2]); spots.push([x,H+PAD/2]); }
   for(let y=6;y<H;y+=13){ spots.push([-PAD/2,y]); spots.push([W+PAD/2,y]); }
   for(const [x,y] of spots) trees.push({x:x+rand()*6-3, y:y+rand()*6-3, r:5+rand()*4,
     variant:Math.floor(rand()*4), seed:rand()});
-})();
+}
+regenDecor();
 
 // grass texture: per-cell hashed dots (light/mid/dark) whose tone forms the checker grid
 const GRASS = {base:"#3f5c3d", light:"#4d6e48", mid:"#446341", dark:"#334d33", darker:"#2c4430"};
@@ -1790,7 +1943,40 @@ function cellHash(gx,gy,i){
   h=(h^(h>>13))*1274126177; h=h^(h>>16);
   return (h>>>0)/4294967295;
 }
+function triPath(){ ctx.beginPath(); ctx.moveTo(TRI.p.x,TRI.p.y); ctx.lineTo(TRI.b.x,TRI.b.y); ctx.lineTo(TRI.c.x,TRI.c.y); ctx.closePath(); }
+function drawGround3(){
+  const gridOn = !(phase==="battle" && !RT);
+  ctx.save(); triPath(); ctx.clip();                 // grass only inside the triangle
+  ctx.fillStyle=GRASS.base; ctx.fillRect(0,0,W,H);
+  for(let gy=0;gy<ROWS;gy++)for(let gx=0;gx<COLS;gx++){
+    const x=gx*CELL, y=gy*CELL, even=(gx+gy)%2===0;
+    for(let i=0;i<7;i++){
+      const dx=Math.floor(cellHash(gx,gy,i)*(CELL-2))+1, dyy=Math.floor(cellHash(gx,gy,i+7)*(CELL-2))+1, roll=cellHash(gx,gy,i+14);
+      let c;
+      if(!gridOn) c=roll<.5?GRASS.mid:roll<.85?GRASS.light:GRASS.dark;
+      else if(even) c=roll<.5?GRASS.light:roll<.85?GRASS.mid:GRASS.dark;
+      else c=roll<.5?GRASS.dark:roll<.8?GRASS.mid:GRASS.darker;
+      px(x+dx,y+dyy, roll<.3?2:1,1,c);
+    }
+    if(gridOn){ ctx.fillStyle=even?"rgba(255,255,255,0.025)":"rgba(0,0,0,0.05)"; ctx.fillRect(x,y,CELL,CELL); }
+  }
+  for(let gy=0;gy<ROWS;gy++)for(let gx=0;gx<COLS;gx++){    // faint per-wedge territory tint
+    const cx=cellCx(gx), cy=cellCx(gy);
+    if(!pointInTri(cx,cy,TRI)) continue;
+    ctx.fillStyle=SIDE_META[nearestVertexSide(cx,cy,TRI)].tint; ctx.fillRect(gx*CELL,gy*CELL,CELL,CELL);
+  }
+  for(const d of decor){
+    if(d.type==="tuft"){ px(d.x,d.y,1,3,"#2f4630"); px(d.x+2,d.y+1,1,2,"#355034"); px(d.x-1,d.y+2,1,2,"#2a3f2b"); }
+    else if(d.type==="flower"){ px(d.x,d.y,2,2,d.c<.5?"#e8a6c0":"#ffd75e"); px(d.x,d.y+2,1,2,"#2f4630"); }
+    else if(d.type==="pebble"){ px(d.x,d.y,3,2,"#7d8577"); px(d.x,d.y,1,1,"#9aa192"); }
+    else { ctx.fillStyle="rgba(0,0,0,0.10)"; ctx.fillRect(d.x,d.y,4,3); }
+  }
+  for(const p of PONDS) drawPond(p);
+  ctx.restore();
+  ctx.strokeStyle="rgba(0,0,0,0.28)"; ctx.lineWidth=2; triPath(); ctx.stroke();   // triangle edge
+}
 function drawGround(){
+  if(NP===3 && TRI){ drawGround3(); return; }
   // uniform grass base
   ctx.fillStyle=GRASS.base; ctx.fillRect(0,0,W,H);
   // the checker grid is a build-phase placement aid — flatten it once the turn-based battle begins
@@ -1864,12 +2050,12 @@ function drawBeachShore(){
   }
 }
 function drawForestBorder(){
-  if(SCENE.border==="water"){ drawBeachShore(); return; }
+  if(SCENE.border==="water" && NP===2){ drawBeachShore(); return; }  // beach shore is rectangular (2-player)
   for(const t of trees) drawTree(t);
 }
 
 function drawTowerSpr(e){
-  const me=e.side==="p", lite=me?PAL.you:PAL.bot, dark=me?PAL.youDark:PAL.botDark;
+  const me=e.side==="p", lite=teamCol(e.side), dark=teamColDark(e.side);
   const cx=e.x, cy=e.y, R=15;
   // drop shadow
   ctx.fillStyle="rgba(0,0,0,.28)"; ctx.beginPath(); ctx.arc(cx+2,cy+3,R,0,7); ctx.fill();
@@ -1927,17 +2113,17 @@ function drawHarvester(e){
   if(e.hp<e.maxHp) drawHpBar(e,x+2,y-8,12);
 }
 function drawTurret(e){
-  const x=e.gx*CELL,y=e.gy*CELL, me=e.side==="p";
+  const x=e.gx*CELL,y=e.gy*CELL, me=e.side==="p", col=teamCol(e.side);
   px(x+3,y+9,10,6,PAL.stoneDark);
   px(x+4,y+5,8,7,PAL.stone);
   const a = e.aim!==undefined?e.aim:(me?0:Math.PI);
-  ctx.strokeStyle=me?PAL.you:PAL.bot; ctx.lineWidth=2;
+  ctx.strokeStyle=col; ctx.lineWidth=2;
   ctx.beginPath(); ctx.moveTo(e.x,e.y-2); ctx.lineTo(e.x+Math.cos(a)*7,e.y-2+Math.sin(a)*7); ctx.stroke();
-  px(e.x-2,e.y-4,4,4,me?PAL.you:PAL.bot);
+  px(e.x-2,e.y-4,4,4,col);
   if(e.hp<e.maxHp) drawHpBar(e,x+2,y-8,12);
 }
 function drawTroop(e){
-  const me=e.side==="p", body=me?PAL.you:PAL.bot, dark=me?PAL.youDark:PAL.botDark;
+  const me=e.side==="p", body=teamCol(e.side), dark=teamColDark(e.side);
   const bob = Math.floor(e.step)%2 ? 0 : -1;    // walk bob
   const x=e.x, y=e.y+bob;
   // drop shadow
@@ -1998,7 +2184,7 @@ function drawAllRanges(){
   for(const e of ents){
     if(e.dead || !rangeOf(e)) continue;
     if(showRanges!=="both" && e.side!==showRanges) continue;
-    const col=e.side==="p"?PAL.you:PAL.bot;
+    const col=teamCol(e.side);
     ctx.globalAlpha=.5; ctx.strokeStyle=col; ctx.lineWidth=1;
     ctx.setLineDash([3,3]); ctx.lineDashOffset=-animT*8;
     ctx.beginPath(); ctx.arc(e.x,e.y,rangeOf(e),0,7); ctx.stroke();
@@ -2018,7 +2204,7 @@ function shooterUnderCursor(){
 function drawRangeHover(){
   const e=shooterUnderCursor();
   if(!e) return;
-  const r=rangeOf(e), col=e.side==="p"?PAL.you:PAL.bot;
+  const r=rangeOf(e), col=teamCol(e.side);
   ctx.globalAlpha=.10; ctx.fillStyle=col;
   ctx.beginPath(); ctx.arc(e.x,e.y,r,0,7); ctx.fill();
   ctx.globalAlpha=.75; ctx.strokeStyle=col; ctx.lineWidth=1;
@@ -2263,6 +2449,8 @@ function setMsgText(t){ document.getElementById("msg").textContent=t; }
 
 // ============================== PATCH NOTES ==============================
     const PATCH_NOTES = [
+  ["v29",["🔺 NEW MODE: 3-Player Free-for-All (vs 2 bots) on a big triangular map! Three corner towers (🔵 you, 🔴, 🟢), wedge territories, same cards & mechanics. Last tower standing wins — troops march at the nearest enemy tower.",
+          "Note: online 3-player is coming in a follow-up; this first version is offline vs two bots."]],
   ["v28",["🔄 You can now sell buildings you placed on the same turn — and sold buildings vanish instantly, freeing the tile so you can immediately place something else there.",
           "Selling a placement you made this turn (online) refunds the full cost, like an undo.",
           "🌐 Online map syncing: both players now share the host's chosen battlefield scene."]],
@@ -2385,6 +2573,7 @@ function checkReports(){
 
 function menuBot(){ cleanupNet(); beginMatch({mode:"bot"}); }
 function menuBlitz(){ cleanupNet(); beginMatch({mode:"bot", rt:true}); }
+function menu3(){ cleanupNet(); beginMatch({mode:"bot", players:3}); }
 function menuCreate(){
   if(!peerReady()) return;
   cleanupNet();
@@ -2558,6 +2747,8 @@ function refreshUI(){
   document.getElementById("bHp").textContent=Math.max(0,towerHp("b"));
   document.getElementById("pLv").textContent=(towerOf("p")||{level:1}).level;
   document.getElementById("bLv").textContent=(towerOf("b")||{level:1}).level;
+  document.getElementById("cHp").textContent=Math.max(0,towerHp("c"));
+  document.getElementById("cLv").textContent=(towerOf("c")||{level:1}).level;
   const building=canBuild();
   for(const key of Object.keys(KINDS)){
     const b=document.getElementById("tool_"+key);

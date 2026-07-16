@@ -1826,14 +1826,11 @@ function frameRing(x,y,w,h,thick,color){    // fill just the border ring of a re
   ctx.fillRect(x,y,thick,h);
   ctx.fillRect(x+w-thick,y,thick,h);
 }
-// Beach: no border trees — ring the sandy island with surf and open water.
+// Beach: no border trees — the field is an island. Keep the ocean entirely in the border margin
+// (never over the playfield), a single flat colour matching the outermost water, plus whitecaps.
 function drawBeachShore(){
   const t=animT;
-  frameRing(-8,-8, W+16, H+16, 24, "#2f7ba6");            // shallow water onto the shore (leaves outer margin deep)
-  frameRing(-2,-2, W+4,  H+4,  12, "#49a0c4");            // brighter shallows nearer the sand
-  const foam=2+Math.sin(t*2.5)*0.5;
-  ctx.globalAlpha=.85; frameRing(4,4, W-8, H-8, foam, "#eaf6fb"); ctx.globalAlpha=1;   // animated foam line
-  frameRing(7,7, W-14, H-14, 5, "rgba(150,122,72,.4)");  // wet-sand blend into the dry island
+  frameRing(-PAD,-PAD, W+2*PAD, H+2*PAD, PAD, PAL.forest); // ocean fills the margin only, up to the field edge
   // drifting whitecaps in the surrounding water
   ctx.fillStyle="rgba(255,255,255,.18)";
   for(let i=0;i<28;i++){

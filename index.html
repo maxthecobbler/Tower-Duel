@@ -73,6 +73,9 @@
   #sceneSel button{min-width:0;padding:7px 13px;font-size:.82em;opacity:.55;transition:opacity .1s}
   #sceneSel button:hover{opacity:.85}
   #sceneSel button.on{opacity:1;border-color:var(--accent);background:#3a3417}
+  #soundRow{display:flex;align-items:center;gap:8px;color:var(--dim);font-size:.85em;margin-bottom:2px}
+  #soundRow input[type=range]{width:150px;accent-color:var(--accent);cursor:pointer}
+  #volPct{min-width:34px;text-align:right;color:var(--text)}
   #notes{position:absolute;inset:0;background:rgba(10,12,22,.96);border-radius:8px;z-index:7;
     display:none;flex-direction:column;padding:14px 18px}
   #notes.show{display:flex}
@@ -106,12 +109,13 @@
   <div id="tip"></div>
   <div id="banner"><div class="big" id="bannerText"></div><button onclick="bannerAction()">↺ Play Again</button></div>
   <div id="menu">
-    <h2>🏰 TOWER DUEL <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">v24</span></h2>
+    <h2>🏰 TOWER DUEL <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">v25</span></h2>
     <div id="sceneSel">
       <button data-scene="forest" class="on">🌲 Forest</button>
       <button data-scene="beach">🏖️ Beach</button>
       <button data-scene="mountains">⛰️ Mountains</button>
     </div>
+    <div id="soundRow">🔊 <input id="volSlider" type="range" min="0" max="100" value="70"><span id="volPct">70%</span></div>
     <button onclick="menuBot()">🤖 Play vs Bot (turn-based)</button>
     <button onclick="menuBlitz()">⚡ Blitz vs Bot (real-time!)</button>
     <button onclick="menuCreate()">🔒 Create Private Room</button>
@@ -145,6 +149,7 @@ const KINDS = {
   wall:     {label:"Wall",     icon:"🧱", cost:3,  hp:40,  building:true},
   harvester:{label:"Harvester",icon:"🌾", cost:5,  hp:20,  building:true},
   turret:   {label:"Turret",   icon:"🗼", cost:8,  hp:30,  building:true, range:90, dmg:5, cd:1.4, aoe:22},
+  spikes:   {label:"Spikes",   icon:"🪤", cost:7,  hp:1,   building:true, trap:true, dmg:15, rad:14},
   duck:     {label:"Duck",     icon:"🦆", cost:6,  hp:16,  building:true, water:true, range:70, cd:1.0, slow:1.6, dmg:0.1},
   magicwell:{label:"Mana Well",icon:"🔮", cost:5,  hp:20,  building:true, magicWater:true},
   soldier:  {label:"Soldier",  icon:"⚔️", cost:4,  hp:10,  troop:true, spd:32, range:11, dmg:3, cd:0.7, aggro:60},
@@ -160,6 +165,7 @@ const TECH={
   harvester:[null,{cost:0,inc:3},              {cost:8, inc:4},              {cost:14,inc:5},              {cost:22,inc:7}],
   magicwell:[null,{cost:0,inc:3},              {cost:8, inc:4},              {cost:14,inc:5},              {cost:22,inc:7}],
   turret:   [null,{cost:0,dmg:5,range:90,cd:1.4},{cost:10,dmg:6,range:98,cd:1.2},{cost:18,dmg:8,range:108,cd:1.0},{cost:30,dmg:10,range:120,cd:0.8}],
+  spikes:   [null,{cost:0,dmg:15,rad:14},      {cost:8, dmg:20,rad:15},      {cost:14,dmg:26,rad:18},      {cost:22,dmg:33,rad:22}],
   duck:     [null,{cost:0,cd:1.0,slow:1.6},    {cost:6, cd:0.8,slow:2.0},    {cost:10,cd:0.65,slow:2.4},   {cost:16,cd:0.5,slow:3.0}],
   soldier:  [null,{cost:0,hp:10,dmg:3,cd:0.7}, {cost:8, hp:13,dmg:4,cd:0.62},{cost:14,hp:16,dmg:5,cd:0.55},{cost:22,hp:20,dmg:6,cd:0.48}],
   archer:   [null,{cost:0,hp:9,dmg:2,cd:0.9,range:66},{cost:8,hp:11,dmg:3,cd:0.8,range:74},{cost:14,hp:13,dmg:4,cd:0.7,range:82},{cost:22,hp:16,dmg:5,cd:0.6,range:92}],
@@ -201,6 +207,7 @@ const TIPS={
   wall:"40 HP — Blocks enemy troops. Connects with adjacent walls.",
   harvester:"20 HP — Earns +3 gold every turn. Its killer loots 25% of its lifetime earnings — but it EXPLODES on death: 12 dmg to all enemies within 2 tiles!",
   turret:"30 HP — Cannonball: 5 splash dmg every 1.4s, range 90.",
+  spikes:"Single-use trap. When an enemy troop steps within ~1 tile, hidden spikes erupt for 15 dmg to every foe in the blast, then the trap is spent. Doesn't block movement.",
   duck:"16 HP — Blue water only! Squirts water at enemy troops (range 70): slows them 50% for 1.6s and deals 0.1 dmg. Ferocious.",
   magicwell:"20 HP — Place on a PURPLE magic pond. Harvests +3 🔮 magic every turn (spells cost magic). Its killer loots 25% of its lifetime earnings!",
   soldier:"10 HP — 3 dmg / 0.7s melee. Speed 32, detection 60.",
@@ -248,11 +255,24 @@ const cv=document.getElementById("cv"), ctx=cv.getContext("2d");
 ctx.imageSmoothingEnabled=false;
 
 // ============================== AUDIO (tiny synth) ==============================
-let AC=null;
-function ac(){ if(!AC) AC=new (window.AudioContext||window.webkitAudioContext)(); return AC; }
+let AC=null, masterGain=null;
+let sndVol=(()=>{ const v=parseFloat(localStorage.getItem("td_vol")); return isNaN(v)?0.7:v; })();  // 0..1
+function ac(){
+  if(!AC){
+    AC=new (window.AudioContext||window.webkitAudioContext)();
+    masterGain=AC.createGain(); masterGain.gain.value=sndVol; masterGain.connect(AC.destination);
+  }
+  return AC;
+}
+function setVolume(v){                                  // driven by the menu slider
+  sndVol=Math.max(0,Math.min(1,v));
+  try{ localStorage.setItem("td_vol",sndVol); }catch(e){}
+  if(masterGain) masterGain.gain.value=sndVol;
+}
 function sfx(type){
+  if(sndVol<=0) return;
   try{
-    const a=ac(), t=a.currentTime, g=a.createGain(); g.connect(a.destination);
+    const a=ac(), t=a.currentTime, g=a.createGain(); g.connect(masterGain||a.destination);
     if(type==="shoot"){ const o=a.createOscillator(); o.type="square"; o.frequency.setValueAtTime(720,t);
       o.frequency.exponentialRampToValueAtTime(160,t+.08); g.gain.setValueAtTime(.05,t);
       g.gain.exponentialRampToValueAtTime(.001,t+.09); o.connect(g); o.start(t); o.stop(t+.1);}
@@ -325,6 +345,13 @@ function puff(x,y,color,n=5){
     parts.push({x,y,vx:rnd(-25,25),vy:rnd(-35,-8),life:rnd(.3,.5),t:0,size:rnd(1,2),color});
 }
 function floatText(x,y,str,color){ texts.push({x,y,str,color,t:0,life:.9}); }
+function spikePop(x,y,color){                        // spikes bursting up out of the ground
+  for(let i=0;i<10;i++) parts.push({x:x+rnd(-5,5),y,vx:rnd(-22,22),vy:rnd(-75,-32),life:rnd(.25,.5),t:0,
+    size:rnd(1,2),color:i%2?"#c8ccd6":color});
+  parts.push({x,y,vx:0,vy:0,life:.12,t:0,size:9,color:PAL.flash,flash:true});
+  shake=Math.min(shake+2,8);
+  sfx("boom");
+}
 
 // ============================== PLACEMENT ==============================
 function inTerritory(side,gx){ return side==="p" ? gx>=0&&gx<=P_MAXCOL : gx>=B_MINCOL&&gx<COLS; }
@@ -489,6 +516,10 @@ function botBuild(){
           if(p&&!p.magic&&validSpot("b",gx,gy,"duck")){ placeAt("duck",gx,gy); break outer2; }
         }
     }
+    // salt the approach with a spike trap when troops are massing
+    if(pTroops.length>=2 && mine("spikes").length<2 && golds.b>=KINDS.spikes.cost+5){
+      placeNear("spikes",18,5+Math.floor(rnd(-2,3)),2);
+    }
   }
 
   // ---- 4) tech: strict priority list, bought with a cash buffer ----
@@ -590,7 +621,7 @@ function bodyR(o){ return o.kind==="tower"?15 : o.building?7 : 3; }
 function acquireTarget(e, aggro){
   let bestT=null,bdT=1e9, bestB=null,bdB=1e9, bestBag=null,bdBag=1e9;
   for(const o of ents){
-    if(o.dead || o.side===e.side) continue;
+    if(o.dead || o.side===e.side || o.kind==="spikes") continue;   // traps are hidden — never targeted
     const d=dist(e,o) - bodyR(o);
     if(d>aggro) continue;
     if(o.troop){ if(d<bdT){bdT=d;bestT=o;} }
@@ -608,7 +639,8 @@ function acquireTarget(e, aggro){
 // enemy buildings physically block troops (walls actually wall things off)
 function collideBuildings(e){
   for(const o of ents){
-    if(o.dead || !o.building || o.side===e.side) continue;
+    if(o.dead || !o.building || o.side===e.side || o.kind==="spikes") continue;  // troops walk over traps
+
     const r=bodyR(o)+3;
     const dx=e.x-o.x, dy=e.y-o.y, d=hyp(dx,dy);
     if(d<r && d>0.001){ e.x=o.x+dx/d*r; e.y=o.y+dy/d*r; }
@@ -919,6 +951,19 @@ function updateBattle(dt){
           e.cd=tstat(e.side,"duck","cd");
           shoot(e,n.t,{dmg:KINDS.duck.dmg,slow:tstat(e.side,"duck","slow"),color:SCENE.proj.color,spd:170,pkind:"water"});
         }
+      }
+    }
+    else if(e.kind==="spikes"){
+      // single-use trap: erupts when an enemy troop steps into the blast, hitting every foe inside
+      const rad=tstat(e.side,"spikes","rad");
+      let armed=false;
+      for(const o of ents){ if(!o.dead && o.troop && o.side!==e.side && dist(e,o)<=rad){ armed=true; break; } }
+      if(armed){
+        const dmg=tstat(e.side,"spikes","dmg"), col=e.side==="p"?PAL.you:PAL.bot;
+        for(const o of ents) if(!o.dead && o.troop && o.side!==e.side && dist(e,o)<=rad) damage(o,dmg,col);
+        floatText(e.x,e.y-10,"SPIKES!",col);
+        spikePop(e.x,e.y,col);
+        e.dead=true;
       }
     }
     else if(e.kind==="tower"){
@@ -1606,6 +1651,23 @@ function drawDuck(e){
   px(e.x-1,y-4,2,1,team);                                                              // team band
   if(e.hp<e.maxHp) drawHpBar(e,e.x-6,y-14,12);
 }
+function drawSpikes(e){
+  const me=e.side==="p", team=me?PAL.you:PAL.bot;
+  // faint team-tinted ring marks it as your trap without shouting
+  ctx.globalAlpha=.28; ctx.strokeStyle=team; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.ellipse(e.x,e.y,7.5,5,0,0,7); ctx.stroke(); ctx.globalAlpha=1;
+  // disturbed patch of ground the spikes are set into
+  ctx.fillStyle="rgba(26,20,12,.5)"; ctx.beginPath(); ctx.ellipse(e.x,e.y+1,6.5,4.2,0,0,7); ctx.fill();
+  ctx.fillStyle="#4a3c26";           ctx.beginPath(); ctx.ellipse(e.x,e.y,5.4,3.2,0,0,7); ctx.fill();
+  // metal spike tips poking up, one catching the light
+  const glint=Math.sin(animT*3+e.x)>0.4;
+  for(const dx of [-3.8,-1.9,0,1.9,3.8]){
+    px(e.x+dx-0.5,e.y-2,1,3,"#6d7280");                                                // dark shaft
+    px(e.x+dx-0.5,e.y-2,1,2,"#9aa0ad");                                                // metal
+    px(e.x+dx-0.5,e.y-2,1,1, glint?"#f2f5fa":"#c3c8d3");                               // bright tip
+  }
+  px(e.x-1,e.y+3,2,1,team);                                                            // team band
+}
 function drawMoneybags(){
   for(const b of moneybags){
     const bob=Math.sin(animT*3+b.x)*0.8;
@@ -2006,6 +2068,7 @@ function render(){
     else if(e.kind==="wall") drawWall(e);
     else if(e.kind==="harvester") drawHarvester(e);
     else if(e.kind==="turret") drawTurret(e);
+    else if(e.kind==="spikes") drawSpikes(e);
     else if(e.kind==="duck") drawDuck(e);
     else if(e.kind==="magicwell") drawMagicWell(e);
     else drawTroop(e);
@@ -2126,6 +2189,10 @@ function setMsgText(t){ document.getElementById("msg").textContent=t; }
 
 // ============================== PATCH NOTES ==============================
     const PATCH_NOTES = [
+  ["v25",["🪤 NEW UNIT: Spikes — a single-use trap (💰7). Place it on your side; when an enemy troop steps within ~1 tile, hidden spikes erupt for 15 damage to every foe in the blast, then it's spent. Doesn't block movement, and the enemy can't target it.",
+          "Spikes upgrade like everything else: L1→L4 raises damage (15/20/26/33) and blast radius.",
+          "🔊 Sound volume slider added to the menu — your setting is remembered between sessions.",
+          "The bot now lays spike traps on its approach when you mass troops."]],
   ["v24",["🌲 NEW: Battlefield scenes! Pick Forest, 🏖️ Beach, or ⛰️ Mountains from the menu — purely cosmetic, no gameplay changes.",
           "🏖️ Beach: sandy ground, palm trees, and an island ringed by water. Ponds become sand castles; your water unit is a 🦀 Crab that lobs beach balls.",
           "⛰️ Mountains: rocky ground and snow-capped pines. Ponds become boulder piles; your water unit is a 🐐 Goat that hurls rocks.",
@@ -2311,7 +2378,7 @@ function showTip(html){ tipEl.innerHTML=html; tipEl.style.display="block"; }
 function hideTip(){ tipEl.style.display="none"; }
 function techLine(card,lvl){
   const t=TECH[card][lvl], names={hp:"HP",inc:"income/turn",dmg:"dmg",range:"range",cd:"s/atk",slow:"slow(s)",
-    spd:"speed",hps:"HP/s",dmgBuilding:"bldg dmg",radius:"radius"};
+    spd:"speed",hps:"HP/s",dmgBuilding:"bldg dmg",radius:"radius",rad:"blast"};
   return Object.entries(t).filter(([f])=>f!=="cost").map(([f,v])=>`${names[f]||f} ${v}`).join(" · ");
 }
 function tipFor(key){
@@ -2479,6 +2546,14 @@ window.addEventListener("keydown",ev=>{ if(ev.key==="Escape"){ selected=null; re
 document.querySelectorAll("#sceneSel button").forEach(b=>{
   b.onclick=()=>applyScene(b.dataset.scene);
 });
+
+// sound slider: master volume, remembered across sessions
+{
+  const slider=document.getElementById("volSlider"), pct=document.getElementById("volPct");
+  slider.value=Math.round(sndVol*100); pct.textContent=slider.value+"%";
+  slider.oninput=()=>{ setVolume(slider.value/100); pct.textContent=slider.value+"%"; };
+  slider.onchange=()=>{ ac(); sfx("place"); };          // audible preview on release
+}
 
 // boot: pretty battlefield behind the menu
 beginMatch({mode:"bot"});

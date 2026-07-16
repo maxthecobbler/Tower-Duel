@@ -69,6 +69,10 @@
   #menu .code{color:var(--accent);font-size:1.6em;font-weight:bold;letter-spacing:6px}
   #verBtn{cursor:pointer;text-decoration:underline dotted}
   #verBtn:hover{color:var(--accent)}
+  #sceneSel{display:flex;gap:6px;margin-bottom:4px}
+  #sceneSel button{min-width:0;padding:7px 13px;font-size:.82em;opacity:.55;transition:opacity .1s}
+  #sceneSel button:hover{opacity:.85}
+  #sceneSel button.on{opacity:1;border-color:var(--accent);background:#3a3417}
   #notes{position:absolute;inset:0;background:rgba(10,12,22,.96);border-radius:8px;z-index:7;
     display:none;flex-direction:column;padding:14px 18px}
   #notes.show{display:flex}
@@ -103,6 +107,11 @@
   <div id="banner"><div class="big" id="bannerText"></div><button onclick="bannerAction()">↺ Play Again</button></div>
   <div id="menu">
     <h2>🏰 TOWER DUEL <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">v23</span></h2>
+    <div id="sceneSel">
+      <button data-scene="forest" class="on">🌲 Forest</button>
+      <button data-scene="beach">🏖️ Beach</button>
+      <button data-scene="mountains">⛰️ Mountains</button>
+    </div>
     <button onclick="menuBot()">🤖 Play vs Bot (turn-based)</button>
     <button onclick="menuBlitz()">⚡ Blitz vs Bot (real-time!)</button>
     <button onclick="menuCreate()">🔒 Create Private Room</button>
@@ -908,7 +917,7 @@ function updateBattle(dt){
         e.aim=Math.atan2(n.t.y-e.y,n.t.x-e.x);
         if(e.cd<=0){
           e.cd=tstat(e.side,"duck","cd");
-          shoot(e,n.t,{dmg:KINDS.duck.dmg,slow:tstat(e.side,"duck","slow"),color:"#7db4ff",spd:170,pkind:"water"});
+          shoot(e,n.t,{dmg:KINDS.duck.dmg,slow:tstat(e.side,"duck","slow"),color:SCENE.proj.color,spd:170,pkind:"water"});
         }
       }
     }
@@ -945,12 +954,12 @@ function updateBattle(dt){
           if(o.dead || o.side===p.side || !o.troop) continue;
           if(hyp(o.x-p.x,o.y-p.y)<=16){
             o.slowT=Math.max(o.slowT||0,p.slow);
-            if(p.dmg>0) damage(o,p.dmg,"#7db4ff");
+            if(p.dmg>0) damage(o,p.dmg,SCENE.proj.color);
             soaked++;
           }
         }
-        if(soaked) floatText(p.x,p.y-10,"splash!","#7db4ff");
-        for(let i=0;i<8;i++) parts.push({x:p.x,y:p.y,vx:rnd(-35,35),vy:rnd(-45,-5),life:rnd(.2,.45),t:0,size:rnd(1,2),color:"#7db4ff"});
+        if(soaked) floatText(p.x,p.y-10,SCENE.splash,SCENE.proj.color);
+        for(let i=0;i<8;i++) parts.push({x:p.x,y:p.y,vx:rnd(-35,35),vy:rnd(-45,-5),life:rnd(.2,.45),t:0,size:rnd(1,2),color:SCENE.proj.color});
       }
       else if(p.aoe){
         boom(p.x,p.y,PAL.gold,12);
@@ -1134,7 +1143,62 @@ const TREE_PAL = [
   {shadow:"#16281c", body:"#1f3d2a", hi:"#2e5a3c"},
   {shadow:"#2c4423", body:"#4a6b35", hi:"#62884a"},
 ];
+
+// ============================== SCENES (visual themes only — no gameplay changes) ==============================
+// Each theme reskins the ground, border, trees, the pond obstacle and the "duck" water unit.
+// Footprints/collision are untouched: a pond stays a pond to the sim, it just LOOKS like rocks or a sandcastle.
+const THEMES = {
+  forest: {
+    name:"Forest", emoji:"🌲",
+    forest:"#22331f",
+    grass:{base:"#3f5c3d", light:"#4d6e48", mid:"#446341", dark:"#334d33", darker:"#2c4430"},
+    neutral:"#5c4f3d", neutralB:"#655741",
+    tree:"leafy", obstacle:"pond",
+    unit:{sprite:"duck", label:"Duck", icon:"🦆",
+      tip:"16 HP — Blue water only! Squirts water at enemy troops (range 70): slows them 50% for 1.6s and deals 0.1 dmg. Ferocious."},
+    proj:{color:"#7db4ff", shape:"drop"}, splash:"splash!",
+  },
+  beach: {
+    name:"Beach", emoji:"🏖️",
+    forest:"#e6d3a0",
+    grass:{base:"#e2cd93", light:"#efdca6", mid:"#e0c98a", dark:"#d2ba78", darker:"#c6ac6a"},
+    neutral:"#cdb583", neutralB:"#d8c290",
+    tree:"palm", obstacle:"sandcastle",
+    unit:{sprite:"crab", label:"Crab", icon:"🦀",
+      tip:"16 HP — Sand castles only! Lobs beach balls at enemy troops (range 70): slows them 50% for 1.6s and deals 0.1 dmg. Snippy."},
+    proj:{color:"#ff5b6b", shape:"ball"}, splash:"bonk!",
+  },
+  mountains: {
+    name:"Mountains", emoji:"⛰️",
+    forest:"#38383f",
+    grass:{base:"#6f7668", light:"#828a78", mid:"#727a68", dark:"#5c6356", darker:"#4e5449"},
+    neutral:"#6b6558", neutralB:"#757060",
+    tree:"pine", obstacle:"rockpile",
+    unit:{sprite:"goat", label:"Goat", icon:"🐐",
+      tip:"16 HP — Rock piles only! Hurls rocks at enemy troops (range 70): slows them 50% for 1.6s and deals 0.1 dmg. Stubborn."},
+    proj:{color:"#b7a998", shape:"rock"}, splash:"crack!",
+  },
+};
+let SCENE = THEMES.forest;
+function applyScene(key){
+  SCENE = THEMES[key] || THEMES.forest;
+  Object.assign(GRASS, SCENE.grass);            // GRASS/PAL fields are mutated live; drawGround reads them
+  PAL.forest = SCENE.forest;
+  PAL.neutral = SCENE.neutral; PAL.neutralB = SCENE.neutralB;
+  KINDS.duck.label = SCENE.unit.label; KINDS.duck.icon = SCENE.unit.icon;
+  TIPS.duck = SCENE.unit.tip;
+  const card = document.getElementById("tool_duck");   // reskin the bottom card (name + logo)
+  if(card){
+    card.querySelector(".ic").textContent = SCENE.unit.icon;
+    card.querySelector(".nm").innerHTML = `${SCENE.unit.label} <span class="lvl" id="lvl_duck"></span>`;
+  }
+  document.querySelectorAll("#sceneSel button").forEach(b=>b.classList.toggle("on", b.dataset.scene===key));
+  if(typeof refreshUI==="function") refreshUI();
+}
+
 function drawTree(t){
+  if(SCENE.tree==="palm"){ drawPalm(t); return; }
+  if(SCENE.tree==="pine"){ drawPine(t); return; }
   const P=TREE_PAL[t.variant], sway=Math.sin(animT*1.5+t.seed*9)*0.8;
   const r = t.variant===1 ? t.r*1.2 : t.variant===3 ? t.r*0.85 : t.r;
   ctx.fillStyle=P.shadow;
@@ -1155,6 +1219,45 @@ function drawTree(t){
     if(t.variant===1){ ctx.beginPath(); ctx.arc(t.x+r*.35+sway,t.y+r*.1,r*.3,0,7); ctx.fill(); }
     if(t.variant===3){ ctx.fillStyle="#7aa35c"; px(t.x-1,t.y-r*.5,2,2,"#7aa35c"); px(t.x+r*.3,t.y,2,1,"#7aa35c"); }
   }
+}
+
+function drawPine(t){
+  const x=t.x, y=t.y, r=t.r, sway=Math.sin(animT*1.4+t.seed*9)*0.5;
+  ctx.fillStyle="rgba(0,0,0,.22)"; ctx.beginPath(); ctx.ellipse(x+1,y+r+1,r*0.7,r*0.25,0,0,7); ctx.fill();
+  px(x-1,y+r*0.4,2,r*0.7,"#5a3f28");                 // trunk
+  const tiers=[
+    {dy:r*0.95, w:r*1.0,  h:r*0.95, c:"#1e3a28"},    // wide bottom, dark
+    {dy:r*0.30, w:r*0.78, h:r*0.85, c:"#265030"},
+    {dy:-r*0.4, w:r*0.56, h:r*0.8,  c:"#2f6238"},    // narrow lit tip
+  ];
+  for(const T of tiers){
+    ctx.fillStyle=T.c;
+    ctx.beginPath();
+    ctx.moveTo(x+sway, y+T.dy-T.h);
+    ctx.lineTo(x-T.w, y+T.dy);
+    ctx.lineTo(x+T.w, y+T.dy);
+    ctx.closePath(); ctx.fill();
+  }
+  px(x-1+sway, y-r*0.9, 2,2, "#dfe8f0");             // snow-dusted tip
+}
+function drawPalm(t){
+  const x=t.x, y=t.y, r=t.r, sway=Math.sin(animT*1.3+t.seed*7)*1.2;
+  const lean=r*0.5, cx=x+lean+sway*0.3, cy=y-r*0.7;  // leaning trunk → crown point
+  ctx.fillStyle="rgba(0,0,0,.20)"; ctx.beginPath(); ctx.ellipse(x+2,y+r+1,r*0.7,r*0.25,0,0,7); ctx.fill();
+  ctx.strokeStyle="#8a6a3f"; ctx.lineWidth=2.4; ctx.lineCap="round";
+  ctx.beginPath(); ctx.moveTo(x,y+r); ctx.quadraticCurveTo(x+lean*0.4,y,cx,cy); ctx.stroke();
+  ctx.strokeStyle="#a5824a"; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(x,y+r); ctx.quadraticCurveTo(x+lean*0.4,y,cx,cy); ctx.stroke();
+  ctx.strokeStyle="#2f7a3a"; ctx.lineWidth=1.7; ctx.lineCap="round";
+  for(let i=0;i<5;i++){                               // drooping fronds fanned across the top
+    const a=Math.PI*0.15 + i*(Math.PI*0.7/4) + sway*0.04;   // ~27°..153°
+    const ex=cx - Math.cos(a)*r*1.25, ey=cy - Math.sin(a)*r*0.55 + r*0.35;
+    ctx.beginPath(); ctx.moveTo(cx,cy);
+    ctx.quadraticCurveTo((cx+ex)/2, cy - r*0.55, ex, ey);
+    ctx.stroke();
+  }
+  ctx.fillStyle="#3f9a48"; ctx.beginPath(); ctx.arc(cx,cy-1,2,0,7); ctx.fill();  // crown tuft
+  px(cx-2,cy+1,2,2,"#5a3f28"); px(cx+1,cy+1,2,2,"#4a3320");                        // coconuts
 }
 
 // ============================== OBSTACLES (random each game, mirrored for fairness) ==============================
@@ -1279,6 +1382,8 @@ function tracePond(p,scale,dy){
   ctx.closePath();
 }
 function drawPond(p){
+  if(SCENE.obstacle==="rockpile"){ drawRockPile(p); return; }
+  if(SCENE.obstacle==="sandcastle"){ drawSandCastle(p); return; }
   // --- transition into the grass: soft damp-green rings, no hard edge ---
   ctx.fillStyle="rgba(44,68,48,0.30)"; tracePond(p,1.42,0); ctx.fill();
   ctx.fillStyle="rgba(38,59,44,0.45)"; tracePond(p,1.24,0); ctx.fill();
@@ -1336,6 +1441,47 @@ function drawPond(p){
     else { px(r.x,r.y-r.h,1,r.h,"#2f4630"); px(r.x+sway,r.y-r.h-1,1,2,"#4a6b35"); }
   }
 }
+// Mountains: the pond footprint becomes a pile of boulders (magic pond → purple crystal rocks).
+function drawRockPile(p){
+  ctx.fillStyle=p.magic?"rgba(58,47,71,.45)":"rgba(60,53,45,.45)"; tracePond(p,1.3,0); ctx.fill();
+  ctx.fillStyle=p.magic?"#3a2f47":"#4a4238"; tracePond(p,1.05,0); ctx.fill();      // dirt base
+  const boulders=[...p.deco.lilies].sort((a,b)=>a.y-b.y);                           // fixed positions, back-to-front
+  for(const b of boulders){
+    const R=b.r*2.2;
+    ctx.fillStyle=p.magic?"#4a3a66":"#6b6358";                                      // rock body
+    ctx.beginPath(); ctx.arc(b.x,b.y,R,0,7); ctx.fill();
+    ctx.fillStyle=p.magic?"#5e4a82":"#807869";                                      // top-left highlight
+    ctx.beginPath(); ctx.arc(b.x-R*0.3,b.y-R*0.3,R*0.6,0,7); ctx.fill();
+    px(b.x-R*0.6,b.y+R*0.35,R*1.2,1.5, p.magic?"#241c34":"#413b32");                // shaded footing
+    if(p.magic){                                                                    // glowing crystal shard
+      const cs=Math.sin(animT*2+b.x)*0.5;
+      px(b.x-1,b.y-R-2+cs,2,4,"#c9a0ff"); px(b.x,b.y-R-1+cs,1,2,"#f0e4ff");
+    }
+  }
+  for(const s of p.deco.pebbles){ px(s.x,s.y,2,2, p.magic?"#5a4a75":"#7a7264"); px(s.x,s.y,1,1, p.magic?"#7a63a0":"#948b7b"); }
+  if(p.magic && Math.random()<.15)
+    parts.push({x:p.x+rnd(-p.rx,p.rx)*.5,y:p.y,vx:rnd(-3,3),vy:rnd(-14,-6),life:rnd(.6,1.2),t:0,size:1,color:Math.random()<.5?"#c9a0ff":"#e8d6ff"});
+}
+// Beach: the pond footprint becomes a sand castle (magic pond → glowing violet castle).
+function drawSandCastle(p){
+  const sand=p.magic?"#d9b6f0":"#efd9a0", sandD=p.magic?"#b78fd0":"#d3b072";
+  ctx.fillStyle=p.magic?"rgba(120,90,150,.32)":"rgba(200,170,110,.38)"; tracePond(p,1.32,0); ctx.fill();
+  ctx.fillStyle=p.magic?"#b89bd0":"#d8bd82"; tracePond(p,1.08,0); ctx.fill();       // damp sand ring
+  ctx.fillStyle=sand;                       tracePond(p,0.9,0);  ctx.fill();        // dry sand mound
+  const cx=p.x, cy=p.y;
+  px(cx-5,cy-2,10,7,sandD); px(cx-4,cy-3,8,7,sand);                                 // keep block
+  for(const dx of [-6,6]){                                                          // corner towers
+    px(cx+dx-2,cy-5,4,9,sandD); px(cx+dx-2,cy-6,4,2,sand);
+    px(cx+dx-2,cy-7,1,1,sand); px(cx+dx,cy-7,1,1,sand); px(cx+dx+1,cy-7,1,1,sand);  // crenellations
+  }
+  px(cx-2,cy-9,4,10,sandD); px(cx-2,cy-9,4,1,sand);                                 // central tower
+  ctx.strokeStyle="#8a6a3f"; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(cx,cy-9); ctx.lineTo(cx,cy-13); ctx.stroke();
+  px(cx,cy-13,3,2, p.magic?"#c9a0ff":"#ff6b6b");                                    // flag
+  px(cx-1,cy+1,2,4,"#8a6a3f");                                                      // door
+  for(const s of p.deco.pebbles){ px(s.x,s.y,2,1, p.magic?"#e0c0ff":"#f0e0b0"); }   // shells
+  if(p.magic && Math.random()<.15)
+    parts.push({x:cx+rnd(-6,6),y:cy,vx:rnd(-3,3),vy:rnd(-14,-6),life:rnd(.6,1.2),t:0,size:1,color:Math.random()<.5?"#c9a0ff":"#e8d6ff"});
+}
 function drawGrove(g){ for(const t of g.trees) if(!t.dead) drawTree(t); }
 
 function drawMagicWell(e){
@@ -1356,7 +1502,42 @@ function drawMagicWell(e){
     parts.push({x:e.x+rnd(-3,3),y:e.y-4,vx:0,vy:rnd(-14,-8),life:rnd(.4,.8),t:0,size:1,color:"#c9a0ff"});
   if(e.hp<e.maxHp) drawHpBar(e,e.x-6,e.y-16,12);
 }
+function drawGoat(e){
+  const me=e.side==="p", team=me?PAL.you:PAL.bot, dir=me?1:-1;
+  const bob=Math.sin(animT*2.4+e.x)*0.6, y=e.y+bob;
+  px(e.x-2,y+2,1,3,"#9a917d"); px(e.x+2,y+2,1,3,"#9a917d");                          // legs
+  ctx.fillStyle="#d8d2c4"; ctx.beginPath(); ctx.ellipse(e.x,y,4.6,3.2,0,0,7); ctx.fill();      // body
+  ctx.fillStyle="#bcb4a2"; ctx.beginPath(); ctx.ellipse(e.x-dir*1.2,y+1,3,2,0,0,7); ctx.fill();// belly shade
+  const hx=e.x+dir*4, hy=y-2;                                                        // head
+  ctx.fillStyle="#e2ddd0"; ctx.beginPath(); ctx.arc(hx,hy,2.4,0,7); ctx.fill();
+  px(hx+dir*1.5-(dir<0?1:0),hy,2,2,"#e2ddd0");                                       // snout
+  ctx.strokeStyle="#8a7a5a"; ctx.lineWidth=1;                                        // curled horn
+  ctx.beginPath(); ctx.moveTo(hx-dir*0.5,hy-2); ctx.quadraticCurveTo(hx-dir*3,hy-3,hx-dir*3,hy); ctx.stroke();
+  px(hx,hy+2,1,2,"#cfc7b4");                                                         // beard
+  px(hx+dir*0.5-(dir<0?1:0),hy-1,1,1,"#141420");                                     // eye
+  px(e.x-1,y-3,2,1,team);                                                            // team band
+  if(e.hp<e.maxHp) drawHpBar(e,e.x-6,y-12,12);
+}
+function drawCrab(e){
+  const me=e.side==="p", team=me?PAL.you:PAL.bot;
+  const bob=Math.sin(animT*3+e.x)*0.5, y=e.y+bob, wig=Math.sin(animT*8+e.x)*0.6;
+  ctx.strokeStyle="#c24a28"; ctx.lineWidth=1;                                        // legs
+  for(let i=-1;i<=1;i++){
+    ctx.beginPath(); ctx.moveTo(e.x-3,y+1); ctx.lineTo(e.x-6,y+2+i+wig); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(e.x+3,y+1); ctx.lineTo(e.x+6,y+2+i-wig); ctx.stroke();
+  }
+  ctx.fillStyle="#e2603a"; ctx.beginPath(); ctx.arc(e.x-5,y-2,1.8,0,7); ctx.fill();  // claws
+  ctx.beginPath(); ctx.arc(e.x+5,y-2,1.8,0,7); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(e.x,y,4.8,3.4,0,0,7); ctx.fill();                     // shell
+  ctx.fillStyle="#f07a4e"; ctx.beginPath(); ctx.ellipse(e.x,y-0.6,4,2.2,0,0,7); ctx.fill();    // lit top
+  px(e.x-2,y-4,1,2,"#c24a28"); px(e.x+2,y-4,1,2,"#c24a28");                          // eye stalks
+  px(e.x-2,y-5,1,1,"#141420"); px(e.x+2,y-5,1,1,"#141420");
+  px(e.x-1,y+2,2,1,team);                                                            // team band
+  if(e.hp<e.maxHp) drawHpBar(e,e.x-6,y-13,12);
+}
 function drawDuck(e){
+  if(SCENE.unit.sprite==="goat"){ drawGoat(e); return; }
+  if(SCENE.unit.sprite==="crab"){ drawCrab(e); return; }
   const me=e.side==="p", team=me?PAL.you:PAL.bot;
   const bob=Math.sin(animT*2.4+e.x)*1.2;
   const y=e.y+bob;
@@ -1469,10 +1650,12 @@ function cellHash(gx,gy,i){
 function drawGround(){
   // uniform grass base
   ctx.fillStyle=GRASS.base; ctx.fillRect(0,0,W,H);
+  // the checker grid is a build-phase placement aid — flatten it once the turn-based battle begins
+  const gridOn = !(phase==="battle" && !RT);
   for(let gy=0;gy<ROWS;gy++)for(let gx=0;gx<COLS;gx++){
     const neutral = gx>P_MAXCOL && gx<B_MINCOL;
     const x=gx*CELL, y=gy*CELL;
-    if(neutral){ px(x,y,CELL,CELL,(gx+gy)%2?PAL.neutral:PAL.neutralB); continue; }
+    if(neutral){ px(x,y,CELL,CELL, (gridOn && (gx+gy)%2)?PAL.neutral:PAL.neutralB); continue; }
     const even=(gx+gy)%2===0;
     // grass dots make the grid: even cells get light-biased dots, odd cells dark-biased
     for(let i=0;i<7;i++){
@@ -1480,13 +1663,16 @@ function drawGround(){
       const dyy=Math.floor(cellHash(gx,gy,i+7)*(CELL-2))+1;
       const roll=cellHash(gx,gy,i+14);
       let c;
-      if(even) c = roll<.5?GRASS.light : roll<.85?GRASS.mid : GRASS.dark;
+      if(!gridOn) c = roll<.5?GRASS.mid  : roll<.85?GRASS.light : GRASS.dark;  // no checker bias during battle
+      else if(even) c = roll<.5?GRASS.light : roll<.85?GRASS.mid : GRASS.dark;
       else     c = roll<.5?GRASS.dark  : roll<.8 ?GRASS.mid : GRASS.darker;
       px(x+dx,y+dyy, roll<.3?2:1, 1, c);
     }
     // faint tone shift so the checker reads at a glance
-    ctx.fillStyle = even ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.05)";
-    ctx.fillRect(x,y,CELL,CELL);
+    if(gridOn){
+      ctx.fillStyle = even ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.05)";
+      ctx.fillRect(x,y,CELL,CELL);
+    }
   }
   // wheel ruts on the dirt road
   ctx.fillStyle="rgba(0,0,0,0.15)";
@@ -1754,9 +1940,18 @@ function render(){
   // projectiles
   for(const p of projs){
     if(p.pkind==="water"){
-      // wobbling water droplet
-      ctx.fillStyle="#7db4ff"; ctx.beginPath(); ctx.arc(p.x,p.y+Math.sin(animT*30)*.5,2,0,7); ctx.fill();
-      px(p.x-1,p.y-1,1,1,"#cfe7ff");
+      if(SCENE.proj.shape==="rock"){                 // mountains: tumbling stone
+        ctx.fillStyle=p.color; ctx.beginPath(); ctx.arc(p.x,p.y,2.6,0,7); ctx.fill();
+        px(p.x-1,p.y-1,1,1,"#e0d6c4");
+      } else if(SCENE.proj.shape==="ball"){          // beach: striped beach ball
+        ctx.fillStyle="#fdfdfd"; ctx.beginPath(); ctx.arc(p.x,p.y,3,0,7); ctx.fill();
+        ctx.fillStyle=p.color;  ctx.beginPath(); ctx.moveTo(p.x,p.y); ctx.arc(p.x,p.y,3,-0.5,0.7); ctx.closePath(); ctx.fill();
+        ctx.fillStyle="#5fb0e4"; ctx.beginPath(); ctx.moveTo(p.x,p.y); ctx.arc(p.x,p.y,3,2.0,3.2); ctx.closePath(); ctx.fill();
+        ctx.strokeStyle="rgba(0,0,0,.2)"; ctx.lineWidth=.5; ctx.beginPath(); ctx.arc(p.x,p.y,3,0,7); ctx.stroke();
+      } else {                                        // forest: wobbling water droplet
+        ctx.fillStyle="#7db4ff"; ctx.beginPath(); ctx.arc(p.x,p.y+Math.sin(animT*30)*.5,2,0,7); ctx.fill();
+        px(p.x-1,p.y-1,1,1,"#cfe7ff");
+      }
     }
     else if(p.pkind==="ball"){
       // cannonball: glow + dark ball + highlight
@@ -2196,10 +2391,16 @@ cv.addEventListener("click",ev=>{
 cv.addEventListener("contextmenu",ev=>{ ev.preventDefault(); selected=null; refreshUI(); });
 window.addEventListener("keydown",ev=>{ if(ev.key==="Escape"){ selected=null; refreshUI(); } });
 
+// scene picker: swap the battlefield theme (purely visual)
+document.querySelectorAll("#sceneSel button").forEach(b=>{
+  b.onclick=()=>applyScene(b.dataset.scene);
+});
+
 // boot: pretty battlefield behind the menu
 beginMatch({mode:"bot"});
 menuOpen=true;
 document.getElementById("menu").classList.remove("hidden");
+applyScene("forest");
 refreshUI();
 requestAnimationFrame(loop);
 </script>

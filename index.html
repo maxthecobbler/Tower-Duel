@@ -1160,7 +1160,7 @@ const THEMES = {
   },
   beach: {
     name:"Beach", emoji:"🏖️",
-    forest:"#e6d3a0",
+    forest:"#1c5a80", border:"water",            // surrounded by ocean → the field is an island
     grass:{base:"#e2cd93", light:"#efdca6", mid:"#e0c98a", dark:"#d2ba78", darker:"#c6ac6a"},
     neutral:"#cdb583", neutralB:"#d8c290",
     tree:"palm", obstacle:"sandcastle",
@@ -1196,68 +1196,64 @@ function applyScene(key){
   if(typeof refreshUI==="function") refreshUI();
 }
 
+// All trees are drawn TOP-DOWN (bird's-eye): canopies are seen from directly above.
 function drawTree(t){
   if(SCENE.tree==="palm"){ drawPalm(t); return; }
   if(SCENE.tree==="pine"){ drawPine(t); return; }
-  const P=TREE_PAL[t.variant], sway=Math.sin(animT*1.5+t.seed*9)*0.8;
-  const r = t.variant===1 ? t.r*1.2 : t.variant===3 ? t.r*0.85 : t.r;
-  ctx.fillStyle=P.shadow;
-  ctx.beginPath(); ctx.arc(t.x+1,t.y+2,r+1,0,7); ctx.fill();
-  if(t.variant===2){
-    // pine: concentric tiers getting lighter toward the tip
-    ctx.fillStyle=P.body;  ctx.beginPath(); ctx.arc(t.x,t.y,r,0,7); ctx.fill();
-    ctx.fillStyle="#2a5136"; ctx.beginPath(); ctx.arc(t.x+sway*.5,t.y,r*.62,0,7); ctx.fill();
-    ctx.fillStyle=P.hi;    ctx.beginPath(); ctx.arc(t.x+sway,t.y,r*.28,0,7); ctx.fill();
-  } else {
-    // lumpy canopy: 3 offset blobs instead of a perfect circle
-    ctx.fillStyle=P.body;
-    ctx.beginPath(); ctx.arc(t.x,t.y,r,0,7); ctx.fill();
-    ctx.beginPath(); ctx.arc(t.x+r*.45,t.y+r*.2,r*.55,0,7); ctx.fill();
-    ctx.beginPath(); ctx.arc(t.x-r*.5,t.y+r*.25,r*.5,0,7); ctx.fill();
-    ctx.fillStyle=P.hi;
-    ctx.beginPath(); ctx.arc(t.x-r*.3+sway,t.y-r*.35,r*.45,0,7); ctx.fill();
-    if(t.variant===1){ ctx.beginPath(); ctx.arc(t.x+r*.35+sway,t.y+r*.1,r*.3,0,7); ctx.fill(); }
-    if(t.variant===3){ ctx.fillStyle="#7aa35c"; px(t.x-1,t.y-r*.5,2,2,"#7aa35c"); px(t.x+r*.3,t.y,2,1,"#7aa35c"); }
-  }
+  drawLeafyTop(t);
 }
-
+// deciduous canopy from above: lumpy circular crown, light pooled toward the centre
+function drawLeafyTop(t){
+  const P=TREE_PAL[t.variant], x=t.x, y=t.y;
+  const r=(t.variant===1?t.r*1.15:t.variant===3?t.r*0.9:t.r);
+  const sway=Math.sin(animT*1.4+t.seed*9)*0.4, lobes=6;
+  ctx.fillStyle="rgba(0,0,0,.20)"; ctx.beginPath(); ctx.arc(x+1.5,y+2,r,0,7); ctx.fill();   // ground shadow
+  ctx.fillStyle=P.shadow;                                                                    // dark outer crown
+  ctx.beginPath(); ctx.arc(x,y,r,0,7); ctx.fill();
+  for(let i=0;i<lobes;i++){ const a=i/lobes*6.283+t.seed;
+    ctx.beginPath(); ctx.arc(x+Math.cos(a)*r*0.66,y+Math.sin(a)*r*0.66,r*0.44,0,7); ctx.fill(); }  // rim lumps
+  ctx.fillStyle=P.body;                                                                      // mid tone
+  ctx.beginPath(); ctx.arc(x+sway,y,r*0.78,0,7); ctx.fill();
+  for(let i=0;i<lobes;i++){ const a=i/lobes*6.283+t.seed+0.6;
+    ctx.beginPath(); ctx.arc(x+Math.cos(a)*r*0.46,y+Math.sin(a)*r*0.46,r*0.3,0,7); ctx.fill(); }
+  ctx.fillStyle=P.hi;                                                                        // top-lit centre
+  ctx.beginPath(); ctx.arc(x-r*0.1+sway,y-r*0.1,r*0.42,0,7); ctx.fill();
+  px(x-1,y-1,1,1,P.hi);
+}
+// conifer from above: a spiky green star, needles radiating outward
 function drawPine(t){
-  const x=t.x, y=t.y, r=t.r, sway=Math.sin(animT*1.4+t.seed*9)*0.5;
-  ctx.fillStyle="rgba(0,0,0,.22)"; ctx.beginPath(); ctx.ellipse(x+1,y+r+1,r*0.7,r*0.25,0,0,7); ctx.fill();
-  px(x-1,y+r*0.4,2,r*0.7,"#5a3f28");                 // trunk
-  const tiers=[
-    {dy:r*0.95, w:r*1.0,  h:r*0.95, c:"#1e3a28"},    // wide bottom, dark
-    {dy:r*0.30, w:r*0.78, h:r*0.85, c:"#265030"},
-    {dy:-r*0.4, w:r*0.56, h:r*0.8,  c:"#2f6238"},    // narrow lit tip
-  ];
-  for(const T of tiers){
-    ctx.fillStyle=T.c;
-    ctx.beginPath();
-    ctx.moveTo(x+sway, y+T.dy-T.h);
-    ctx.lineTo(x-T.w, y+T.dy);
-    ctx.lineTo(x+T.w, y+T.dy);
+  const x=t.x, y=t.y, r=t.r, spin=Math.sin(animT*1.2+t.seed*9)*0.1, rot=t.seed*6.283, spikes=9;
+  ctx.fillStyle="rgba(0,0,0,.20)"; ctx.beginPath(); ctx.arc(x+1.5,y+2,r*0.95,0,7); ctx.fill();
+  const star=(r1,r2,col,off)=>{
+    ctx.fillStyle=col; ctx.beginPath();
+    for(let i=0;i<spikes*2;i++){ const a=rot+off+spin+i/(spikes*2)*6.283, rad=i%2?r2:r1;
+      const vx=x+Math.cos(a)*rad, vy=y+Math.sin(a)*rad; i===0?ctx.moveTo(vx,vy):ctx.lineTo(vx,vy); }
     ctx.closePath(); ctx.fill();
-  }
-  px(x-1+sway, y-r*0.9, 2,2, "#dfe8f0");             // snow-dusted tip
+  };
+  star(r,      r*0.5,  "#1e3a28", 0);      // dark outer needles
+  star(r*0.78, r*0.42, "#265030", 0.16);
+  star(r*0.52, r*0.28, "#2f6238", 0.32);   // lighter inner
+  px(x-0.5,y-0.5,1.5,1.5,"#3a6b42");        // trunk core
+  px(x,y,1,1,"#dfe8f0");                    // snow fleck at the crown
 }
+// palm from above: fronds splayed out like a pinwheel from a central trunk
 function drawPalm(t){
-  const x=t.x, y=t.y, r=t.r, sway=Math.sin(animT*1.3+t.seed*7)*1.2;
-  const lean=r*0.5, cx=x+lean+sway*0.3, cy=y-r*0.7;  // leaning trunk → crown point
-  ctx.fillStyle="rgba(0,0,0,.20)"; ctx.beginPath(); ctx.ellipse(x+2,y+r+1,r*0.7,r*0.25,0,0,7); ctx.fill();
-  ctx.strokeStyle="#8a6a3f"; ctx.lineWidth=2.4; ctx.lineCap="round";
-  ctx.beginPath(); ctx.moveTo(x,y+r); ctx.quadraticCurveTo(x+lean*0.4,y,cx,cy); ctx.stroke();
-  ctx.strokeStyle="#a5824a"; ctx.lineWidth=1;
-  ctx.beginPath(); ctx.moveTo(x,y+r); ctx.quadraticCurveTo(x+lean*0.4,y,cx,cy); ctx.stroke();
-  ctx.strokeStyle="#2f7a3a"; ctx.lineWidth=1.7; ctx.lineCap="round";
-  for(let i=0;i<5;i++){                               // drooping fronds fanned across the top
-    const a=Math.PI*0.15 + i*(Math.PI*0.7/4) + sway*0.04;   // ~27°..153°
-    const ex=cx - Math.cos(a)*r*1.25, ey=cy - Math.sin(a)*r*0.55 + r*0.35;
-    ctx.beginPath(); ctx.moveTo(cx,cy);
-    ctx.quadraticCurveTo((cx+ex)/2, cy - r*0.55, ex, ey);
-    ctx.stroke();
+  const x=t.x, y=t.y, r=t.r, sway=Math.sin(animT*1.3+t.seed*7)*0.12, fronds=7;
+  ctx.fillStyle="rgba(0,0,0,.18)"; ctx.beginPath(); ctx.arc(x+1.5,y+2,r*0.9,0,7); ctx.fill();
+  for(let i=0;i<fronds;i++){
+    const a=i/fronds*6.283 + t.seed + sway;
+    const mx=x+Math.cos(a)*r*0.6, my=y+Math.sin(a)*r*0.6;         // arch control point
+    const ex=x+Math.cos(a)*r*1.2, ey=y+Math.sin(a)*r*1.2;
+    const perp=a+Math.PI/2, bow=r*0.18;                          // slight curl to each frond
+    ctx.strokeStyle="#2f7a3a"; ctx.lineWidth=2.6; ctx.lineCap="round";
+    ctx.beginPath(); ctx.moveTo(x,y);
+    ctx.quadraticCurveTo(mx+Math.cos(perp)*bow, my+Math.sin(perp)*bow, ex, ey); ctx.stroke();
+    ctx.strokeStyle="#43a24d"; ctx.lineWidth=1;                  // frond midrib highlight
+    ctx.beginPath(); ctx.moveTo(x,y);
+    ctx.quadraticCurveTo(mx+Math.cos(perp)*bow, my+Math.sin(perp)*bow, ex, ey); ctx.stroke();
   }
-  ctx.fillStyle="#3f9a48"; ctx.beginPath(); ctx.arc(cx,cy-1,2,0,7); ctx.fill();  // crown tuft
-  px(cx-2,cy+1,2,2,"#5a3f28"); px(cx+1,cy+1,2,2,"#4a3320");                        // coconuts
+  ctx.fillStyle="#5a3f28"; ctx.beginPath(); ctx.arc(x,y,1.9,0,7); ctx.fill();   // trunk hub
+  px(x,y-1,1,1,"#8a6a3f"); px(x-1,y,1,1,"#4a3320");                              // coconuts
 }
 
 // ============================== OBSTACLES (random each game, mirrored for fairness) ==============================
@@ -1442,44 +1438,69 @@ function drawPond(p){
   }
 }
 // Mountains: the pond footprint becomes a pile of boulders (magic pond → purple crystal rocks).
+// a deterministic scatter of boulders filling the pond footprint (cached per pond, stable each frame)
+function rockScatter(p){
+  if(p._rocks) return p._rocks;
+  let s=((p.shimSeed*99991)>>>0) || 12345;
+  const rr=()=>{ s=(s*1103515245+12345)&0x7fffffff; return s/0x7fffffff; };
+  const n=11+Math.floor(rr()*6), arr=[];                                            // ~11-16 rocks
+  for(let i=0;i<n;i++){
+    const a=rr()*Math.PI*2, rad=Math.sqrt(rr())*0.9;                                // even fill of the disk
+    arr.push({x:p.x+Math.cos(a)*p.rx*rad, y:p.y+Math.sin(a)*p.ry*rad, r:1.5+rr()*2.8, big:rr()<0.35});
+  }
+  arr.sort((a,b)=>a.y-b.y);                                                          // back-to-front
+  return (p._rocks=arr);
+}
+// Mountains: the pond footprint becomes a heaped pile of boulders (magic pond → purple crystal rocks).
 function drawRockPile(p){
-  ctx.fillStyle=p.magic?"rgba(58,47,71,.45)":"rgba(60,53,45,.45)"; tracePond(p,1.3,0); ctx.fill();
-  ctx.fillStyle=p.magic?"#3a2f47":"#4a4238"; tracePond(p,1.05,0); ctx.fill();      // dirt base
-  const boulders=[...p.deco.lilies].sort((a,b)=>a.y-b.y);                           // fixed positions, back-to-front
-  for(const b of boulders){
-    const R=b.r*2.2;
-    ctx.fillStyle=p.magic?"#4a3a66":"#6b6358";                                      // rock body
+  ctx.fillStyle=p.magic?"rgba(58,47,71,.45)":"rgba(60,53,45,.45)"; tracePond(p,1.28,0); ctx.fill();
+  ctx.fillStyle=p.magic?"#3a2f47":"#463f36"; tracePond(p,1.06,0); ctx.fill();       // dirt base
+  for(const b of rockScatter(p)){
+    const R=b.r;
+    ctx.fillStyle=p.magic?"#2a2038":"#3a352d";                                       // dark contact shadow
+    ctx.beginPath(); ctx.ellipse(b.x,b.y+R*0.5,R*1.05,R*0.5,0,0,7); ctx.fill();
+    ctx.fillStyle=p.magic?"#4a3a66":"#6b6358";                                       // rock body
     ctx.beginPath(); ctx.arc(b.x,b.y,R,0,7); ctx.fill();
-    ctx.fillStyle=p.magic?"#5e4a82":"#807869";                                      // top-left highlight
-    ctx.beginPath(); ctx.arc(b.x-R*0.3,b.y-R*0.3,R*0.6,0,7); ctx.fill();
-    px(b.x-R*0.6,b.y+R*0.35,R*1.2,1.5, p.magic?"#241c34":"#413b32");                // shaded footing
-    if(p.magic){                                                                    // glowing crystal shard
+    ctx.fillStyle=p.magic?"#5e4a82":"#847c6d";                                       // top-left highlight
+    ctx.beginPath(); ctx.arc(b.x-R*0.28,b.y-R*0.3,R*0.6,0,7); ctx.fill();
+    px(b.x-R*0.2,b.y-R*0.45,1,1, p.magic?"#b79ce0":"#9c9384");                        // spec dot
+    if(p.magic && b.big){                                                            // glowing crystal shard on big rocks
       const cs=Math.sin(animT*2+b.x)*0.5;
-      px(b.x-1,b.y-R-2+cs,2,4,"#c9a0ff"); px(b.x,b.y-R-1+cs,1,2,"#f0e4ff");
+      px(b.x-1,b.y-R-2.5+cs,2,4,"#c9a0ff"); px(b.x,b.y-R-1.5+cs,1,2,"#f0e4ff");
     }
   }
   for(const s of p.deco.pebbles){ px(s.x,s.y,2,2, p.magic?"#5a4a75":"#7a7264"); px(s.x,s.y,1,1, p.magic?"#7a63a0":"#948b7b"); }
   if(p.magic && Math.random()<.15)
     parts.push({x:p.x+rnd(-p.rx,p.rx)*.5,y:p.y,vx:rnd(-3,3),vy:rnd(-14,-6),life:rnd(.6,1.2),t:0,size:1,color:Math.random()<.5?"#c9a0ff":"#e8d6ff"});
 }
-// Beach: the pond footprint becomes a sand castle (magic pond → glowing violet castle).
+// Beach: the pond footprint becomes a top-down sand castle (magic pond → glowing violet castle).
 function drawSandCastle(p){
-  const sand=p.magic?"#d9b6f0":"#efd9a0", sandD=p.magic?"#b78fd0":"#d3b072";
-  ctx.fillStyle=p.magic?"rgba(120,90,150,.32)":"rgba(200,170,110,.38)"; tracePond(p,1.32,0); ctx.fill();
-  ctx.fillStyle=p.magic?"#b89bd0":"#d8bd82"; tracePond(p,1.08,0); ctx.fill();       // damp sand ring
-  ctx.fillStyle=sand;                       tracePond(p,0.9,0);  ctx.fill();        // dry sand mound
-  const cx=p.x, cy=p.y;
-  px(cx-5,cy-2,10,7,sandD); px(cx-4,cy-3,8,7,sand);                                 // keep block
-  for(const dx of [-6,6]){                                                          // corner towers
-    px(cx+dx-2,cy-5,4,9,sandD); px(cx+dx-2,cy-6,4,2,sand);
-    px(cx+dx-2,cy-7,1,1,sand); px(cx+dx,cy-7,1,1,sand); px(cx+dx+1,cy-7,1,1,sand);  // crenellations
+  const magic=p.magic;
+  const sandL=magic?"#ecd3ff":"#f4e3b0", sand=magic?"#d9b6f0":"#e8d197",
+        sandD=magic?"#b78fd0":"#cdad6c", sandDD=magic?"#976fb6":"#b0925a";
+  ctx.fillStyle=magic?"rgba(120,90,150,.32)":"rgba(200,170,110,.38)"; tracePond(p,1.32,0); ctx.fill();
+  ctx.fillStyle=magic?"#b89bd0":"#d8bd82"; tracePond(p,1.10,0); ctx.fill();          // damp sand apron
+  ctx.fillStyle=sand;                       tracePond(p,0.92,0); ctx.fill();         // dry sand mound
+  const cx=Math.round(p.x), cy=Math.round(p.y), s=7;
+  ctx.fillStyle=sandDD; ctx.fillRect(cx-s,cy-s,2*s,2*s);                             // outer bailey wall
+  ctx.fillStyle=sandD;  ctx.fillRect(cx-s,cy-s,2*s,2*s-1);
+  ctx.fillStyle=sandL;  ctx.fillRect(cx-s+1,cy-s+1,2*s-2,2);                         // sun-lit wall top
+  ctx.fillStyle=sandDD; ctx.fillRect(cx-4,cy-4,8,8);                                 // sunken courtyard
+  ctx.fillStyle=sandD;  ctx.fillRect(cx-3,cy-3,6,6);
+  for(const [dx,dy] of [[-s,-s],[s-2,-s],[-s,s-2],[s-2,s-2]]){                        // 4 corner turrets
+    ctx.fillStyle=sandDD; ctx.fillRect(cx+dx-1,cy+dy-1,4,4);
+    ctx.fillStyle=sand;   ctx.fillRect(cx+dx,cy+dy,3,3);
+    px(cx+dx,cy+dy,1,1,sandL);
   }
-  px(cx-2,cy-9,4,10,sandD); px(cx-2,cy-9,4,1,sand);                                 // central tower
-  ctx.strokeStyle="#8a6a3f"; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(cx,cy-9); ctx.lineTo(cx,cy-13); ctx.stroke();
-  px(cx,cy-13,3,2, p.magic?"#c9a0ff":"#ff6b6b");                                    // flag
-  px(cx-1,cy+1,2,4,"#8a6a3f");                                                      // door
-  for(const s of p.deco.pebbles){ px(s.x,s.y,2,1, p.magic?"#e0c0ff":"#f0e0b0"); }   // shells
-  if(p.magic && Math.random()<.15)
+  for(let i=-s+2;i<s-2;i+=3){ px(cx+i,cy-s,1,1,sandDD); px(cx+i,cy+s-1,1,1,sandDD); }// crenellation notches
+  ctx.fillStyle=sandDD; ctx.beginPath(); ctx.arc(cx,cy,3.2,0,7); ctx.fill();         // central keep
+  ctx.fillStyle=sand;   ctx.beginPath(); ctx.arc(cx,cy,2.1,0,7); ctx.fill();
+  px(cx-1,cy-1,1,1,sandL);
+  px(cx+1,cy+1,2,1,"rgba(0,0,0,.18)");                                              // flag's cast shadow
+  px(cx,cy-1,1,1,"#8a6a3f");                                                         // flag pole
+  px(cx+1,cy-2,3,2, magic?"#c9a0ff":"#ff6b6b");                                      // banner
+  for(const sh of p.deco.pebbles){ px(sh.x,sh.y,2,1, magic?"#e6c8ff":"#f2e3b4"); px(sh.x,sh.y,1,1, magic?"#fff":"#fff8e0"); }
+  if(magic && Math.random()<.15)
     parts.push({x:cx+rnd(-6,6),y:cy,vx:rnd(-3,3),vy:rnd(-14,-6),life:rnd(.6,1.2),t:0,size:1,color:Math.random()<.5?"#c9a0ff":"#e8d6ff"});
 }
 function drawGrove(g){ for(const t of g.trees) if(!t.dead) drawTree(t); }
@@ -1695,7 +1716,38 @@ function drawGround(){
   for(const p of PONDS) drawPond(p);
 }
 
-function drawForestBorder(){ for(const t of trees) drawTree(t); }
+function frameRing(x,y,w,h,thick,color){    // fill just the border ring of a rectangle
+  ctx.fillStyle=color;
+  ctx.fillRect(x,y,w,thick);
+  ctx.fillRect(x,y+h-thick,w,thick);
+  ctx.fillRect(x,y,thick,h);
+  ctx.fillRect(x+w-thick,y,thick,h);
+}
+// Beach: no border trees — ring the sandy island with surf and open water.
+function drawBeachShore(){
+  const t=animT;
+  frameRing(-8,-8, W+16, H+16, 24, "#2f7ba6");            // shallow water onto the shore (leaves outer margin deep)
+  frameRing(-2,-2, W+4,  H+4,  12, "#49a0c4");            // brighter shallows nearer the sand
+  const foam=2+Math.sin(t*2.5)*0.5;
+  ctx.globalAlpha=.85; frameRing(4,4, W-8, H-8, foam, "#eaf6fb"); ctx.globalAlpha=1;   // animated foam line
+  frameRing(7,7, W-14, H-14, 5, "rgba(150,122,72,.4)");  // wet-sand blend into the dry island
+  // drifting whitecaps in the surrounding water
+  ctx.fillStyle="rgba(255,255,255,.18)";
+  for(let i=0;i<28;i++){
+    const xx=((i*53 + t*10) % (W+2*PAD)) - PAD;
+    ctx.fillRect(xx, -PAD+((i*7)%9), 3, 1);
+    ctx.fillRect(((i*47 - t*9)%(W+2*PAD))-PAD, H+PAD-2-((i*7)%8), 3, 1);
+  }
+  for(let i=0;i<20;i++){
+    const yy=((i*41 + t*8) % (H+2*PAD)) - PAD;
+    ctx.fillRect(-PAD+((i*5)%8), yy, 1, 3);
+    ctx.fillRect(W+PAD-2-((i*5)%8), ((i*37 - t*7)%(H+2*PAD))-PAD, 1, 3);
+  }
+}
+function drawForestBorder(){
+  if(SCENE.border==="water"){ drawBeachShore(); return; }
+  for(const t of trees) drawTree(t);
+}
 
 function drawTowerSpr(e){
   const me=e.side==="p", lite=me?PAL.you:PAL.bot, dark=me?PAL.youDark:PAL.botDark;
@@ -2046,7 +2098,12 @@ function setMenuStatus(status, code){
 function setMsgText(t){ document.getElementById("msg").textContent=t; }
 
 // ============================== PATCH NOTES ==============================
-const PATCH_NOTES=[
+    const PATCH_NOTES = [
+  ["v24",["🌲 NEW: Battlefield scenes! Pick Forest, 🏖️ Beach, or ⛰️ Mountains from the menu — purely cosmetic, no gameplay changes.",
+          "🏖️ Beach: sandy ground, palm trees, and an island ringed by water. Ponds become sand castles; your water unit is a 🦀 Crab that lobs beach balls.",
+          "⛰️ Mountains: rocky ground and snow-capped pines. Ponds become boulder piles; your water unit is a 🐐 Goat that hurls rocks.",
+          "The build grid now fades away when a turn-based battle begins, and returns for the next build phase.",
+          "Trees, obstacles, and unit sprites redrawn top-down to match the battlefield view."]],
   ["v23",["Blitz HUD now says \"/6s\" and \"Tick\" instead of \"/turn\" and \"Turn\"."]],
   ["v22",["⚡ NEW GAME MODE: Blitz — real-time, no turns! Build anytime, income every 6s, spells fire instantly. Vs bot (online stays turn-based).",
           "💰 Sell button: click your buildings to sell them for 50% of their cost.",

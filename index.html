@@ -215,7 +215,7 @@
     </div>
   </div>
   <div id="menu">
-    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">5.26.21.13</span></h2>
+    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">5.26.21.14</span></h2>
     <div id="sceneSel">
       <button data-scene="forest" class="on">Forest</button>
       <button data-scene="beach">Beach</button>
@@ -2739,7 +2739,15 @@ function drawGunNest(e){
     px(x+2,y+15,12,2,"#2a2f45"); px(x+2,y+15,Math.round(12*f),2,"#ffa65a");
   }
   drawUpgradeRing(e,8);
-  if(manned && showBar(e)) drawHpBar(e,x+2,y-8,12);  // the bar is the GUNNER's health
+  if(manned && showBar(e)){                          // gunner's health: just the number, floating out in front — no bar
+    const hp=Math.max(0,Math.ceil(e.gHp));
+    const tx=e.x+(facesRight(e.side)?14:-14), ty=e.y+2;
+    ctx.font="bold 8px monospace"; ctx.textAlign="center";
+    ctx.fillStyle="#10121c";
+    ctx.fillText(hp,tx-1,ty); ctx.fillText(hp,tx+1,ty);
+    ctx.fillText(hp,tx,ty-1); ctx.fillText(hp,tx,ty+1);
+    ctx.fillStyle=PAL.white; ctx.fillText(hp,tx,ty);
+  }
 }
 function drawTurret(e){
   const x=e.gx*CELL,y=e.gy*CELL, me=facesRight(e.side), col=teamCol(e.side);
@@ -3169,6 +3177,7 @@ function setMsgText(t){ document.getElementById("msg").textContent=t; }
 
 // ============================== PATCH NOTES ==============================
     const PATCH_NOTES = [
+  ["5.26.21.14",["🔫 Hovering a manned Gun Nest now shows its gunner's health as a clean number floating out in front of the nest — no bar cluttering the wall."]],
   ["5.26.21.13",["💚 HP bars & numbers now pop up while units are being HEALED too (heal zones, HP upgrades, tower level-ups), fading out 2.5s after — same as when they take damage."]],
   ["5.26.21.12",["🔫 NEW CARD: GUN NEST (💰12) — a machine-gun emplacement built ON TOP of one of your walls!",
           "It needs a gunner: place a Soldier onto the nest to man it (garrisoned soldiers don't count toward the troop limit). Bursts of 20 shots at 1 dmg every 0.1s, then a 10s reload — upgrades take it to 3s reloads and 35-shot magazines. Its RANGE scales with your Soldier level (70 → 100).",

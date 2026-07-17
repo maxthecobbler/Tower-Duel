@@ -53,6 +53,10 @@
   .tool .mod:hover:not(:disabled){background:var(--orange)}
   .tool .mod.armed{background:var(--orange);color:#2a1a08;box-shadow:0 0 6px var(--orange)}
   .tool .mod:disabled{opacity:.4;cursor:not-allowed}
+  .tool .info{position:absolute;bottom:-9px;left:-6px;background:#1e2a44;border:1px solid var(--you);
+    color:var(--you);border-radius:8px;font-family:inherit;font-size:.68em;font-weight:bold;
+    padding:1px 5px;cursor:pointer;line-height:1.3}
+  .tool .info:hover{background:var(--you);color:#08202c}
   .tool .ic{font-size:1.2em}
   .tool .nm{font-size:.75em;display:block}
   .tool .cs{color:var(--accent);font-size:.75em;font-weight:bold}
@@ -171,6 +175,7 @@
     .tool .nm{font-size:.6em}
     .tool .cs{font-size:.62em}
     .tool .up{top:-7px;right:-4px;padding:2px 6px;font-size:.62em}   /* bigger tap target */
+    .tool .info{bottom:-7px;left:-4px;padding:2px 7px;font-size:.7em}   /* bigger tap target */
     .secLabel{flex-basis:100%;text-align:left;font-size:.62em;margin-bottom:1px}   /* label on its own line */
     .cardSection{flex-wrap:wrap}
     #fight{font-size:1em;padding:8px 18px;min-width:0;flex:none}
@@ -210,7 +215,7 @@
     </div>
   </div>
   <div id="menu">
-    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">5.24.21.12</span></h2>
+    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">5.25.21.12</span></h2>
     <div id="sceneSel">
       <button data-scene="forest" class="on">Forest</button>
       <button data-scene="beach">Beach</button>
@@ -3025,6 +3030,7 @@ function setMsgText(t){ document.getElementById("msg").textContent=t; }
 
 // ============================== PATCH NOTES ==============================
     const PATCH_NOTES = [
+  ["5.25.21.12",["ℹ️ Every card now has a little ⓘ button — tap it to pop up that card's stats (great for touch screens, where there's no hover). Tap it again, or select the card, to close it. Hovering still works on desktop."]],
   ["5.24.21.12",["🖥️ On wide screens, the card panel now sits to the LEFT of the battlefield with each category as a vertical column, making better use of the space. Narrower windows keep the card bar below the battlefield as before."]],
   ["5.23.21.12",["⚖️ New unit caps: maximum 3 Catapults and 1 Tank alive per side at a time. Their cards grey out once you hit the limit (and re-enable if one is destroyed or sold)."]],
   ["5.23.20.12",["🗂️ The card bar is now organized into labelled sections — Buildings, Troops, Spells, and Actions — so it's easier to find what you want at a glance."]],
@@ -3325,7 +3331,9 @@ function menuJoin(){
 const toolbar=document.getElementById("toolbar");
 const tipEl=document.getElementById("tip");
 function showTip(html){ tipEl.innerHTML=html; tipEl.style.display="block"; }
-function hideTip(){ tipEl.style.display="none"; }
+let pinnedInfo=null;                                  // card key whose info is pinned open via its ⓘ button (mobile-friendly)
+function hideTip(){ if(!pinnedInfo) tipEl.style.display="none"; }   // a pinned popup stays until dismissed
+function clearInfo(){ pinnedInfo=null; tipEl.style.display="none"; }
 function techLine(card,lvl){
   const t=TECH[card][lvl], names={hp:"HP",inc:"income/turn",dmg:"dmg",range:"range",cd:"s/atk",slow:"slow(s)",
     spd:"speed",hps:"HP/s",dmgBuilding:"bldg dmg",dmgTroop:"troop dmg",radius:"radius",rad:"blast"};
@@ -3349,13 +3357,22 @@ function makeCardButton(key){
   const cur=k.spell?"🔮":"💰";
   b.innerHTML=`<span class="ic">${k.icon}</span><span class="nm">${k.label} <span class="lvl" id="lvl_${key}"></span></span><span class="cs">${cur}${k.cost}</span>`;
   b.onclick=ev=>{
-    if(ev.target.classList.contains("up")||ev.target.classList.contains("mod")) return;
+    if(ev.target.classList.contains("up")||ev.target.classList.contains("mod")||ev.target.classList.contains("info")) return;
     if(b.classList.contains("disabled")) return;
-    selected = selected===key?null:key; refreshUI();
-    if(selected===key) showTip(tipFor(key)); else hideTip();   // tap shows stats (touch has no hover)
+    selected = selected===key?null:key;
+    clearInfo();                                   // selecting a card closes the info popup (use ⓘ to view it)
+    refreshUI();
   };
-  b.onmouseenter=()=>showTip(tipFor(key));
+  b.onmouseenter=()=>{ if(!pinnedInfo) showTip(tipFor(key)); };   // hover preview on desktop (won't override a pinned popup)
   b.onmouseleave=hideTip;
+  // ⓘ info button — TAP to pop up this card's stats (works without hover, for touch screens)
+  const info=document.createElement("button");
+  info.className="info"; info.id="info_"+key; info.textContent="ⓘ";
+  info.onclick=ev=>{ ev.stopPropagation();
+    if(pinnedInfo===key){ clearInfo(); }
+    else { pinnedInfo=key; showTip(tipFor(key)); }
+  };
+  b.appendChild(info);
   if(TECH[key]){
     const u=document.createElement("button");
     u.className="up"; u.id="up_"+key; u.textContent="⬆";
@@ -3566,8 +3583,8 @@ cv.addEventListener("click",ev=>{
   if(selected==="sellTroop"){ sellTroopAt(p.x,p.y); return; }
   place(selected,p.gx,p.gy);
 });
-cv.addEventListener("contextmenu",ev=>{ ev.preventDefault(); selected=null; refreshUI(); });
-window.addEventListener("keydown",ev=>{ if(ev.key==="Escape"){ selected=null; refreshUI(); } });
+cv.addEventListener("contextmenu",ev=>{ ev.preventDefault(); selected=null; clearInfo(); refreshUI(); });
+window.addEventListener("keydown",ev=>{ if(ev.key==="Escape"){ selected=null; clearInfo(); refreshUI(); } });
 
 // ---- tank driving keys: arrows + WASD (held-key state; cleared on blur so nothing sticks) ----
 const driveKeys={};

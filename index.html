@@ -187,7 +187,7 @@
     </div>
   </div>
   <div id="menu">
-    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">5.21.18.9</span></h2>
+    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">5.22.18.9</span></h2>
     <div id="sceneSel">
       <button data-scene="forest" class="on">Forest</button>
       <button data-scene="beach">Beach</button>
@@ -632,19 +632,29 @@ function validSpot(side,gx,gy,kind){
   return true;
 }
 function canPlace(gx,gy){
-  if(selected==="sell") return false;
+  if(selected==="sell"||selected==="sellTroop") return false;
   if(selected && KINDS[selected] && KINDS[selected].spell) return canPlaceSpell(gx,gy);
   if(selected && KINDS[selected] && KINDS[selected].troop && troopCount(mySide)>=TROOP_LIMIT) return false;
   return canBuild() && validSpot(mySide,gx,gy,selected);
 }
-function sellableAt(side,gx,gy){
+function sellableAt(side,gx,gy){          // BUILDINGS only (the Sell button)
   return ents.find(o=>!o.dead && !o.selling && o.side===side && o.building && o.kind!=="tower" &&
     o.gx!==undefined && gx>=o.gx && gx<o.gx+(o.gw||1) && gy>=o.gy && gy<o.gy+(o.gh||1));
 }
-function sellAt(gx,gy){
-  if(!canBuild()) return;
-  const e=sellableAt(mySide,gx,gy);
+function sellableTroopAt(side,x,y){       // TROOPS only (the Sell Troop button) — point-based hit test
+  let best=null, bd=1e9;
+  for(const o of ents){
+    if(o.dead || o.selling || o.side!==side || !o.troop) continue;
+    const d=hyp(x-o.x, y-o.y);
+    if(d<=bodyR(o)+5 && d<bd){ bd=d; best=o; }
+  }
+  return best;
+}
+// a troop's grid cell (troops sit at cell-centres when placed; used to match online sell orders)
+function cellOf(e){ return e.building ? {gx:e.gx,gy:e.gy} : {gx:Math.floor(e.x/CELL), gy:Math.floor(e.y/CELL)}; }
+function sellEntity(e){                   // shared refund logic for buildings AND troops
   if(!e){ setMsgText("Nothing of yours to sell there."); return; }
+  const c=cellOf(e);
   let refund;
   if(e.pending){
     // undo a placement made this turn (online): full refund, cancel its pending order
@@ -653,15 +663,15 @@ function sellAt(gx,gy){
     e.dead=true; ents=ents.filter(o=>!o.dead);
     for(let i=myOrders.length-1;i>=0;i--){          // drop the matching place order
       const o=myOrders[i];
-      if(o.kind===e.kind && o.gx===e.gx && o.gy===e.gy){ myOrders.splice(i,1); break; }
+      if(o.kind===e.kind && o.gx===c.gx && o.gy===c.gy){ myOrders.splice(i,1); break; }
     }
   } else {
-    // committed building: 50% refund, cell frees immediately for a replacement
+    // committed unit: 50% refund, freed immediately for a replacement
     refund=Math.floor(KINDS[e.kind].cost*SELL_RATE);
     golds[mySide]+=refund;
     if(mode==="online"){
       e.selling=true;                               // kept (hidden) until the canonical sell resolves
-      myOrders.push({kind:"sell",gx:e.gx,gy:e.gy});
+      myOrders.push({kind:"sell",gx:c.gx,gy:c.gy,troop:e.troop?1:0});
     } else {
       e.dead=true; ents=ents.filter(o=>!o.dead);
     }
@@ -670,6 +680,14 @@ function sellAt(gx,gy){
   for(let i=0;i<6;i++) parts.push({x:e.x,y:e.y,vx:rnd(-35,35),vy:rnd(-50,-15),life:rnd(.35,.6),t:0,size:rnd(1,2),color:PAL.gold});
   sfx("coin");
   refreshUI();
+}
+function sellAt(gx,gy){       if(!canBuild()) return; sellEntity(sellableAt(mySide,gx,gy)); }
+function sellTroopAt(x,y){    if(!canBuild()) return; sellEntity(sellableTroopAt(mySide,x,y)); }
+// match a "sell" order (from the network) back to its building or troop
+function findSellTarget(side,o){
+  return o.troop
+    ? ents.find(t=>!t.dead && t.side===side && t.troop && Math.floor(t.x/CELL)===o.gx && Math.floor(t.y/CELL)===o.gy)
+    : ents.find(t=>!t.dead && t.side===side && t.building && t.kind!=="tower" && t.gx===o.gx && t.gy===o.gy);
 }
 function canPlaceSpell(gx,gy){ return canBuild() && gx>=0 && gx<COLS && gy>=0 && gy<ROWS; }
 // GOLD cost of an order list (spells excluded — they cost magic)
@@ -683,8 +701,7 @@ function costOfSide(side,orders){
       tl[o.card]=nx; s+=TECH[o.card][nx].cost;
     }
     else if(o.kind==="sell"){                     // sells are NEGATIVE cost (a refund)
-      const e=ents.find(t=>!t.dead && t.side===side && t.building && t.kind!=="tower" &&
-        t.gx===o.gx && t.gy===o.gy);
+      const e=findSellTarget(side,o);
       if(e) s-=Math.floor(KINDS[e.kind].cost*SELL_RATE);
     }
     else if(o.kind==="mod"){ s+=(MODIFIERS[o.card]?MODIFIERS[o.card].cost:9999); }
@@ -1570,8 +1587,7 @@ function resolveOrders(data){
         continue;
       }
       if(o.kind==="sell"){
-        const e=ents.find(t=>!t.dead && t.side===side && t.building && t.kind!=="tower" &&
-          t.gx===o.gx && t.gy===o.gy);
+        const e=findSellTarget(side,o);
         if(e){
           golds[side]+=Math.floor(KINDS[e.kind].cost*SELL_RATE);
           e.dead=true;
@@ -2700,6 +2716,17 @@ function drawRangeHover(){
 }
 function drawGhost(){
   if(!selected||!hover||!canBuild()) return;
+  if(selected==="sellTroop"){
+    const e=sellableTroopAt(mySide,hover.x,hover.y);
+    if(e){
+      ctx.globalAlpha=.9; ctx.strokeStyle=PAL.gold; ctx.lineWidth=1.5;
+      ctx.beginPath(); ctx.arc(e.x,e.y,bodyR(e)+4,0,7); ctx.stroke();
+      ctx.font="bold 8px monospace"; ctx.textAlign="center"; ctx.fillStyle=PAL.gold;
+      ctx.fillText("+"+Math.floor(KINDS[e.kind].cost*SELL_RATE), e.x, e.y-bodyR(e)-6);
+      ctx.globalAlpha=1;
+    }
+    return;
+  }
   if(selected==="sell"){
     const e=sellableAt(mySide,hover.gx,hover.gy);
     if(e){
@@ -2957,6 +2984,8 @@ function setMsgText(t){ document.getElementById("msg").textContent=t; }
 
 // ============================== PATCH NOTES ==============================
     const PATCH_NOTES = [
+  ["5.22.18.9",["⚔️ NEW: \"Sell Troop\" button! Troops can now be sold for 50% of their gold — click the button, then click one of your troops. It only targets troops, so no more mix-ups with the building Sell button.",
+          "The regular 💰 Sell button now sells buildings only, keeping the two cleanly separate."]],
   ["5.21.18.9",["❤ NEW: \"Show health\" toggle below the battlefield (like Show ranges) — pin HP bars & numbers for the 🔵 Blue side, 🔴 Red side, or both at once, without hovering."]],
   ["5.20.18.9",["🔢 HP bars are cleaner: the exact HP number now appears only when you hover your cursor over a unit. The little health bars still show as usual when something's damaged."]],
   ["5.20.18.8",["✨ Upgrade looks simplified: every card now shows a single glowing ring — bronze (L2), silver (L3), gold (L4) — just like troops, instead of the assorted studs, crowns, and trims."]],
@@ -3349,6 +3378,14 @@ sellBtn.onclick=()=>{ if(sellBtn.classList.contains("disabled"))return; selected
 sellBtn.onmouseenter=()=>showTip(`<b>💰 Sell</b><br>Click one of your buildings to sell it for 50% of its gold cost. The tower is not for sale.`);
 sellBtn.onmouseleave=hideTip;
 toolbar.appendChild(sellBtn);
+// sell-TROOP mode button — same as Sell but only targets troops (no mix-ups)
+const sellTroopBtn=document.createElement("div");
+sellTroopBtn.className="tool"; sellTroopBtn.id="tool_sellTroop";
+sellTroopBtn.innerHTML=`<span class="ic">⚔️</span><span class="nm">Sell Troop</span><span class="cs">+50%</span>`;
+sellTroopBtn.onclick=()=>{ if(sellTroopBtn.classList.contains("disabled"))return; selected=selected==="sellTroop"?null:"sellTroop"; refreshUI(); };
+sellTroopBtn.onmouseenter=()=>showTip(`<b>⚔️ Sell Troop</b><br>Click one of your troops to sell it for 50% of its gold cost. Only affects troops — never your buildings.`);
+sellTroopBtn.onmouseleave=hideTip;
+toolbar.appendChild(sellTroopBtn);
 const fightBtn=document.createElement("button");
 fightBtn.id="fight"; fightBtn.textContent="⚔️ FIGHT!";
 fightBtn.onclick=startBattle;
@@ -3406,6 +3443,8 @@ function refreshUI(){
   }
   sellBtn.classList.toggle("disabled", !building);
   sellBtn.classList.toggle("selected", selected==="sell");
+  sellTroopBtn.classList.toggle("disabled", !building);
+  sellTroopBtn.classList.toggle("selected", selected==="sellTroop");
   {
     const t=towerOf(mySide), lvl=t?t.level:1;
     if(lvl>=4){ upBtn.innerHTML=`<span class="ic">⬆️</span><span class="nm">Tower MAX</span><span class="cs">L4</span>`; upBtn.disabled=true; }
@@ -3436,6 +3475,7 @@ function refreshUI(){
       ? "⚔️ Battle! 🪖 Drive the tank with WASD/arrows, aim with the mouse, CLICK to fire!"
       : "⚔️ Battle in progress…";
   else if(selected==="sell") msg.textContent=`💰 SELL MODE — ${act} one of your buildings to sell it for half price. ${cancelHint}`;
+  else if(selected==="sellTroop") msg.textContent=`⚔️ SELL TROOP MODE — ${act} one of your troops to sell it for half price. ${cancelHint}`;
   else if(selected && KINDS[selected].spell) msg.textContent=`Placing ${KINDS[selected].label} — ${act} ANYWHERE on the map. ${RT?"It fires immediately!":"It launches when the battle starts."}`;
   else if(selected) msg.textContent=`Placing ${KINDS[selected].label} — ${act} a tile on your (${sideTxt}) side. ${cancelHint}`;
   else msg.innerHTML=`You are <b>${sideTxt}</b>${RT?" · ⚡ BLITZ — build anytime, income every "+RT_TICK+"s":""}. Troops alive ${troopCount(mySide)}/${TROOP_LIMIT}. ${deselectHint}`;
@@ -3455,6 +3495,7 @@ cv.addEventListener("click",ev=>{
   if(!selected && phase==="battle" && !over && !menuOpen && mode!=="online"){ fireMyTanks(p.x,p.y); return; }
   if(!selected||!canBuild()) return;
   if(selected==="sell"){ sellAt(p.gx,p.gy); return; }
+  if(selected==="sellTroop"){ sellTroopAt(p.x,p.y); return; }
   place(selected,p.gx,p.gy);
 });
 cv.addEventListener("contextmenu",ev=>{ ev.preventDefault(); selected=null; refreshUI(); });
@@ -3520,6 +3561,7 @@ cv.addEventListener("touchend",ev=>{
   }
   else if(hover && selected && canBuild()){
     if(selected==="sell") sellAt(hover.gx,hover.gy);
+    else if(selected==="sellTroop") sellTroopAt(hover.x,hover.y);
     else place(selected,hover.gx,hover.gy);
   }
   hover=null;                                  // clear the ghost after lifting

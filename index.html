@@ -187,7 +187,7 @@
     </div>
   </div>
   <div id="menu">
-    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">5.20.16.7</span></h2>
+    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">5.20.17.7</span></h2>
     <div id="sceneSel">
       <button data-scene="forest" class="on">Forest</button>
       <button data-scene="beach">Beach</button>
@@ -2147,6 +2147,17 @@ function drawManaGeode(e){                          // mountains: a cracked rock
     px(x+dx-0.3, y+dy-h+sh-1, 1,1, "#f0e4ff");
   }
 }
+// upgrade looks: cards get visibly fancier as they level — L2 bronze, L3 silver, L4 gold
+const LVL_TRIM=[null,null,"#c08a4e","#d7dde8","#ffd75e"];
+function trimOf(e){ return LVL_TRIM[techLvl(e.side,e.kind)]||null; }
+// floating headwear for water units (duck/goat/crab share it): circlet → coronet → crown
+function drawUnitCrown(e){
+  const lvl=techLvl(e.side,e.kind), tr=trimOf(e); if(!tr) return;
+  const y=e.y-8+Math.sin(animT*2.4+e.x)*0.8;
+  px(e.x-2,y,4,1,tr);                                    // band
+  if(lvl>=3){ px(e.x-1,y-1,2,1,tr); }                    // raised center
+  if(lvl>=4){ px(e.x-2,y-1,1,1,tr); px(e.x+1,y-1,1,1,tr); px(e.x-0.5,y-2,1,1,"#fff3c4"); }  // three points + jewel
+}
 function drawMagicWell(e){
   const me=facesRight(e.side), team=teamCol(e.side);
   const bob=Math.sin(animT*2+e.x)*0.8;
@@ -2158,6 +2169,13 @@ function drawMagicWell(e){
     ctx.fillStyle="#2a1d3d"; ctx.beginPath(); ctx.arc(e.x,e.y,3,0,7); ctx.fill();
   }
   drawManaOrb(e,bob);
+  {const tr=trimOf(e), lvl=techLvl(e.side,e.kind);   // upgraded wells: metal rim → orbiting mote → golden halo
+    if(tr){ ctx.globalAlpha=.8; ctx.strokeStyle=tr; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.arc(e.x,e.y,7,0,7); ctx.stroke(); ctx.globalAlpha=1;
+      if(lvl>=3){ const oa=animT*2.2+e.x; px(e.x+Math.cos(oa)*8-0.5, e.y-4+Math.sin(oa)*3, 1,1,"#e7d6ff"); }
+      if(lvl>=4){ ctx.globalAlpha=.3+Math.sin(animT*4)*.15; ctx.strokeStyle="#ffd75e";
+        ctx.beginPath(); ctx.arc(e.x,e.y,9.5,0,7); ctx.stroke(); ctx.globalAlpha=1; }
+    }}
   px(e.x-1,e.y+5,2,1,team);                         // team band
   if(Math.random()<.06)                            // rising motes
     parts.push({x:e.x+rnd(-3,3),y:e.y-4,vx:0,vy:rnd(-14,-8),life:rnd(.4,.8),t:0,size:1,color:"#c9a0ff"});
@@ -2197,8 +2215,8 @@ function drawCrab(e){
   if(e.hp<e.maxHp) drawHpBar(e,e.x-6,y-13,12);
 }
 function drawDuck(e){
-  if(SCENE.unit.sprite==="goat"){ drawGoat(e); return; }
-  if(SCENE.unit.sprite==="crab"){ drawCrab(e); return; }
+  if(SCENE.unit.sprite==="goat"){ drawGoat(e); drawUnitCrown(e); return; }
+  if(SCENE.unit.sprite==="crab"){ drawCrab(e); drawUnitCrown(e); return; }
   const me=facesRight(e.side), team=teamCol(e.side);
   const bob=Math.sin(animT*2.4+e.x)*1.2;
   const y=e.y+bob;
@@ -2216,6 +2234,7 @@ function drawDuck(e){
   ctx.fillStyle="#f5d33e"; ctx.beginPath(); ctx.arc(hx,hy,2.6,0,7); ctx.fill();
   px(hx+Math.cos(a)*2.6, hy+Math.sin(a)*2.6-1, 3,2, "#f08c1e");                       // beak
   px(hx-1+Math.cos(a), hy-1, 1,1, "#141420");                                          // eye
+  drawUnitCrown(e);                                                                     // upgraded ducks wear crowns
   px(e.x-1,y-4,2,1,team);                                                              // team band
   if(e.hp<e.maxHp) drawHpBar(e,e.x-6,y-14,12);
 }
@@ -2233,6 +2252,10 @@ function drawSpikes(e){
     px(e.x+dx-0.5,e.y-2,1,3,"#6d7280");                                                // dark shaft
     px(e.x+dx-0.5,e.y-2,1,2,"#9aa0ad");                                                // metal
     px(e.x+dx-0.5,e.y-2,1,1, glint?"#f2f5fa":"#c3c8d3");                               // bright tip
+  }
+  {const tr=trimOf(e), lvl=techLvl(e.side,e.kind);   // upgraded traps: alloy tips, extra spikes at L3+
+    if(tr) for(const dx of [-3.8,-1.9,0,1.9,3.8]) px(e.x+dx-0.5,e.y-2,1,1,tr);
+    if(lvl>=3) for(const dx of [-2.9,2.9]){ px(e.x+dx-0.5,e.y-3,1,3,"#9aa0ad"); px(e.x+dx-0.5,e.y-3,1,1,tr); }
   }
   px(e.x-1,e.y+3,2,1,team);                                                            // team band
 }
@@ -2501,6 +2524,11 @@ function drawWall(e){
   // brick seams
   px(x+2,y+5,CELL-4,1,PAL.stoneDark); px(x+2,y+10,CELL-4,1,PAL.stoneDark);
   px(x+8,y+2,1,3,PAL.stoneDark); px(x+4,y+6,1,4,PAL.stoneDark); px(x+11,y+6,1,4,PAL.stoneDark); px(x+7,y+11,1,4,PAL.stoneDark);
+  {const tr=trimOf(e), lvl=techLvl(e.side,e.kind);   // upgraded walls: corner studs → banded top → gold caps
+    if(tr){ px(x+3,y+3,2,2,tr); px(x+CELL-5,y+CELL-5,2,2,tr);
+      if(lvl>=3){ px(x+CELL-5,y+3,2,2,tr); px(x+3,y+CELL-5,2,2,tr); }
+      if(lvl>=4){ px(x+2,y+1,CELL-4,1,tr); px(x+7,y+7,2,2,"#fff3c4"); }
+    }}
   if(e.hp<e.maxHp) drawHpBar(e,x+2,y-8,12);
 }
 function drawHarvester(e){
@@ -2514,6 +2542,12 @@ function drawHarvester(e){
   ctx.moveTo(cx-Math.cos(a)*5,cy-Math.sin(a)*5); ctx.lineTo(cx+Math.cos(a)*5,cy+Math.sin(a)*5);
   ctx.moveTo(cx-Math.sin(a)*5,cy+Math.cos(a)*5); ctx.lineTo(cx+Math.sin(a)*5,cy-Math.cos(a)*5);
   ctx.stroke();
+  {const tr=trimOf(e), lvl=techLvl(e.side,e.kind);   // upgraded harvesters: trimmed roof → grain sacks → golden shine
+    if(tr){ px(x+2,y+6,12,1,tr);
+      if(lvl>=3){ px(x+12,y+11,3,4,"#d9b64e"); px(x+12,y+11,3,1,"#eed27a"); }
+      if(lvl>=4){ ctx.globalAlpha=.2+Math.sin(animT*3+x)*.08; ctx.fillStyle="#ffd75e";
+        ctx.beginPath(); ctx.arc(cx,y+9,9,0,7); ctx.fill(); ctx.globalAlpha=1; }
+    }}
   if(e.hp<e.maxHp) drawHpBar(e,x+2,y-8,12);
 }
 function drawTurret(e){
@@ -2524,6 +2558,11 @@ function drawTurret(e){
   ctx.strokeStyle=col; ctx.lineWidth=2;
   ctx.beginPath(); ctx.moveTo(e.x,e.y-2); ctx.lineTo(e.x+Math.cos(a)*7,e.y-2+Math.sin(a)*7); ctx.stroke();
   px(e.x-2,e.y-4,4,4,col);
+  {const tr=trimOf(e), lvl=techLvl(e.side,e.kind);   // upgraded turrets: banded base → armored rim → gold finial
+    if(tr){ px(x+4,y+11,8,1,tr);
+      if(lvl>=3) px(x+5,y+5,6,1,tr);
+      if(lvl>=4) px(e.x-1,e.y-6,2,2,"#ffd75e");
+    }}
   if(e.hp<e.maxHp) drawHpBar(e,x+2,y-8,12);
 }
 function drawCatapult(e){
@@ -2539,6 +2578,11 @@ function drawCatapult(e){
   ctx.beginPath(); ctx.moveTo(cx,cy-1); ctx.lineTo(bx,by); ctx.stroke();
   ctx.fillStyle="#8a7860"; ctx.beginPath(); ctx.arc(bx,by,2.6,0,7); ctx.fill();
   px(bx-1,by-1,1,1,"#c3b088");                                      // rock highlight
+  {const tr=trimOf(e), lvl=techLvl(e.side,e.kind);   // upgraded catapults: bound frame → shod wheels → gilded bucket
+    if(tr){ px(cx-12,cy+1,24,1,tr);
+      if(lvl>=3){ px(cx-12,cy+8,3,1,tr); px(cx+9,cy+8,3,1,tr); }
+      if(lvl>=4) px(bx-2,by-2,4,1,"#ffd75e");
+    }}
   px(cx-1,cy+3,2,1,col);                                            // team band
   if(e.hp<e.maxHp) drawHpBar(e,cx-6,cy-9,12);
 }
@@ -2550,19 +2594,27 @@ function drawTroop(e){
   ctx.fillStyle="rgba(0,0,0,.25)";
   ctx.beginPath(); ctx.arc(e.x,e.y+3,3,0,7); ctx.fill();
 
+  const tr=trimOf(e), lvl=techLvl(e.side,e.kind);  // upgrade trim: bronze → silver → gold (+glow at L4)
   if(e.kind==="soldier"){                        // ● circle
+    if(tr && lvl>=4){ ctx.globalAlpha=.3+Math.sin(animT*5)*.12; ctx.fillStyle=tr;
+      ctx.beginPath(); ctx.arc(x,y,6.5,0,7); ctx.fill(); ctx.globalAlpha=1; }
     ctx.fillStyle=dark; ctx.beginPath(); ctx.arc(x,y,4.5,0,7); ctx.fill();
     ctx.fillStyle=body; ctx.beginPath(); ctx.arc(x,y,3,0,7); ctx.fill();
+    if(tr){ ctx.strokeStyle=tr; ctx.lineWidth=1; ctx.beginPath(); ctx.arc(x,y,4.5,0,7); ctx.stroke(); }
     px(x-1,y-1,1,1,PAL.white);
     if(e.hp<e.maxHp) drawHpBar(e,x-4,y-13,8);
   }
   else if(e.kind==="archer"){                    // ▲ triangle (points where it's aiming)
     const a = e.aim!==undefined ? e.aim : (me?0:Math.PI);
     ctx.save(); ctx.translate(x,y); ctx.rotate(a);
+    if(tr && lvl>=4){ ctx.globalAlpha=.3+Math.sin(animT*5)*.12; ctx.fillStyle=tr;
+      ctx.beginPath(); ctx.moveTo(7,0); ctx.lineTo(-6,-7); ctx.lineTo(-6,7); ctx.closePath(); ctx.fill(); ctx.globalAlpha=1; }
     ctx.fillStyle=dark; ctx.beginPath();
     ctx.moveTo(5,0); ctx.lineTo(-4,-5); ctx.lineTo(-4,5); ctx.closePath(); ctx.fill();
     ctx.fillStyle=body; ctx.beginPath();
     ctx.moveTo(3,0); ctx.lineTo(-2.5,-3); ctx.lineTo(-2.5,3); ctx.closePath(); ctx.fill();
+    if(tr){ ctx.strokeStyle=tr; ctx.lineWidth=0.9; ctx.beginPath();
+      ctx.moveTo(5,0); ctx.lineTo(-4,-5); ctx.lineTo(-4,5); ctx.closePath(); ctx.stroke(); }
     ctx.restore();
     if(e.hp<e.maxHp) drawHpBar(e,x-4,y-13,8);
   }
@@ -2577,6 +2629,11 @@ function drawTroop(e){
     ctx.fillStyle=dark; ctx.beginPath(); ctx.arc(0,0,3.4,0,7); ctx.fill();   // turret
     ctx.fillStyle=body; ctx.beginPath(); ctx.arc(0,0,2.2,0,7); ctx.fill();
     ctx.restore();
+    if(tr){                                                          // upgraded tanks: trimmed turret ring (+glow at L4)
+      if(lvl>=4){ ctx.globalAlpha=.3+Math.sin(animT*5)*.12; ctx.strokeStyle=tr; ctx.lineWidth=2;
+        ctx.beginPath(); ctx.arc(x,y,8,0,7); ctx.stroke(); ctx.globalAlpha=1; }
+      ctx.strokeStyle=tr; ctx.lineWidth=1; ctx.beginPath(); ctx.arc(x,y,3.6,0,7); ctx.stroke();
+    }
     if(e.hp<e.maxHp) drawHpBar(e,x-6,y-17,12);
     if(e.cd>0){                                                     // reload bar under the tank
       const f=1-e.cd/tstat(e.side,"tank","cd");
@@ -2586,8 +2643,12 @@ function drawTroop(e){
     }
   }
   else {                                         // ■ square (brute)
+    if(tr && lvl>=4){ ctx.globalAlpha=.3+Math.sin(animT*5)*.12; ctx.fillStyle=tr;
+      px(x-6.5,y-6.5,13,13,tr); ctx.globalAlpha=1; }
     px(x-5,y-5,10,10,dark);
     px(x-3.5,y-3.5,7,7,body);
+    if(tr){ px(x-5,y-5,2,2,tr); px(x+3,y-5,2,2,tr);            // armor studs, more each level
+      if(lvl>=3){ px(x-5,y+3,2,2,tr); px(x+3,y+3,2,2,tr); } }
     px(x-2,y-2,2,2,PAL.white);
     if(e.hp<e.maxHp) drawHpBar(e,x-5,y-15,10);
   }
@@ -2911,6 +2972,8 @@ function setMsgText(t){ document.getElementById("msg").textContent=t; }
 
 // ============================== PATCH NOTES ==============================
     const PATCH_NOTES = [
+  ["5.20.17.7",["✨ Upgrades now SHOW: every card gets visibly fancier as it levels — bronze trim at L2, silver at L3, gold with a glow at L4.",
+          "Walls gain studs and gold caps, turrets a finial, harvesters spare grain sacks and a golden shine, catapults iron-shod wheels and a gilded bucket, ducks earn crowns, mana wells a halo, spikes extra alloy tips — and troops (soldier/archer/brute/tank) wear rank trim."]],
   ["5.20.16.7",["📱 Touch players now get a virtual JOYSTICK (bottom-left) to drive the Tank — it appears automatically during battle when you have one. It's analog: small deflections creep, full tilt is top speed.",
           "Tap the battlefield to fire, exactly as before. Mobile tanks no longer drive themselves."]],
   ["5.20.15.7",["📱 Menu overhaul for mobile: it now fills the whole screen (no more cut-off bottom) with two clean columns — VS BOTS and ONLINE.",

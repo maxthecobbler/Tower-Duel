@@ -187,7 +187,7 @@
     </div>
   </div>
   <div id="menu">
-    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">5.20.17.7</span></h2>
+    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">5.20.17.8</span></h2>
     <div id="sceneSel">
       <button data-scene="forest" class="on">Forest</button>
       <button data-scene="beach">Beach</button>
@@ -2533,21 +2533,22 @@ function drawWall(e){
 }
 function drawHarvester(e){
   const x=e.gx*CELL,y=e.gy*CELL, me=facesRight(e.side);
+  const cx=x+8, cy=y+5;
+  // upgrade trim + glow render BENEATH the windmill so the spinning blades stay clearly visible
+  {const tr=trimOf(e), lvl=techLvl(e.side,e.kind);   // upgraded harvesters: trimmed eave → grain sacks → golden shine
+    if(tr && lvl>=4){ ctx.globalAlpha=.2+Math.sin(animT*3+x)*.08; ctx.fillStyle="#ffd75e";
+      ctx.beginPath(); ctx.arc(cx,y+9,9,0,7); ctx.fill(); ctx.globalAlpha=1; }
+    if(tr && lvl>=3){ px(x+12,y+11,3,4,"#d9b64e"); px(x+12,y+11,3,1,"#eed27a"); }   // grain sacks beside the hut
+  }
   px(x+3,y+8,10,7,me?"#3a6e5a":"#6e3a3a");     // hut
   px(x+2,y+6,12,3,PAL.stoneDark);              // roof
-  const a=animT*4+(e.gx+e.gy);                 // spinning blades
+  {const tr=trimOf(e); if(tr) px(x+2,y+13,12,1,tr);}   // trim the lower eave — clear of the windmill hub
+  const a=animT*4+(e.gx+e.gy);                 // spinning blades (drawn last, always on top)
   ctx.strokeStyle=PAL.gold; ctx.lineWidth=1;
-  const cx=x+8, cy=y+5;
   ctx.beginPath();
   ctx.moveTo(cx-Math.cos(a)*5,cy-Math.sin(a)*5); ctx.lineTo(cx+Math.cos(a)*5,cy+Math.sin(a)*5);
   ctx.moveTo(cx-Math.sin(a)*5,cy+Math.cos(a)*5); ctx.lineTo(cx+Math.sin(a)*5,cy-Math.cos(a)*5);
   ctx.stroke();
-  {const tr=trimOf(e), lvl=techLvl(e.side,e.kind);   // upgraded harvesters: trimmed roof → grain sacks → golden shine
-    if(tr){ px(x+2,y+6,12,1,tr);
-      if(lvl>=3){ px(x+12,y+11,3,4,"#d9b64e"); px(x+12,y+11,3,1,"#eed27a"); }
-      if(lvl>=4){ ctx.globalAlpha=.2+Math.sin(animT*3+x)*.08; ctx.fillStyle="#ffd75e";
-        ctx.beginPath(); ctx.arc(cx,y+9,9,0,7); ctx.fill(); ctx.globalAlpha=1; }
-    }}
   if(e.hp<e.maxHp) drawHpBar(e,x+2,y-8,12);
 }
 function drawTurret(e){
@@ -2972,6 +2973,7 @@ function setMsgText(t){ document.getElementById("msg").textContent=t; }
 
 // ============================== PATCH NOTES ==============================
     const PATCH_NOTES = [
+  ["5.20.17.8",["🔧 Fixed the upgraded harvester's trim covering its spinning windmill — the blades now always draw on top, and the trim moved down to the eave."]],
   ["5.20.17.7",["✨ Upgrades now SHOW: every card gets visibly fancier as it levels — bronze trim at L2, silver at L3, gold with a glow at L4.",
           "Walls gain studs and gold caps, turrets a finial, harvesters spare grain sacks and a golden shine, catapults iron-shod wheels and a gilded bucket, ducks earn crowns, mana wells a halo, spikes extra alloy tips — and troops (soldier/archer/brute/tank) wear rank trim."]],
   ["5.20.16.7",["📱 Touch players now get a virtual JOYSTICK (bottom-left) to drive the Tank — it appears automatically during battle when you have one. It's analog: small deflections creep, full tilt is top speed.",

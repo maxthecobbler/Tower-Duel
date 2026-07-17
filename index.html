@@ -187,7 +187,7 @@
     </div>
   </div>
   <div id="menu">
-    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">5.22.20.11</span></h2>
+    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">5.22.20.12</span></h2>
     <div id="sceneSel">
       <button data-scene="forest" class="on">Forest</button>
       <button data-scene="beach">Beach</button>
@@ -2655,7 +2655,8 @@ function healthShownFor(e){
   if(showHealth==="both") return true;
   return teamCol(e.side)===teamCol(showHealth);   // team-aware: "Blue" covers both blue-team units in 2v2
 }
-function hovered(e){ return hover && hyp(hover.x-e.x, hover.y-e.y) <= bodyR(e)+5; }
+// hover-to-see-HP is suppressed in sell modes, so the refund label isn't blocked by the health bar
+function hovered(e){ return hover && selected!=="sell" && selected!=="sellTroop" && hyp(hover.x-e.x, hover.y-e.y) <= bodyR(e)+5; }
 // bar shows: recently damaged (battle only — hidden in build mode), hovered, or pinned by Show-Health
 function showBar(e){ return (phase!=="build" && e.hpT>0) || hovered(e) || healthShownFor(e); }
 // the exact HP count appears whenever the bar does: on damage (battle), on hover, or via Show-Health
@@ -2993,6 +2994,7 @@ function setMsgText(t){ document.getElementById("msg").textContent=t; }
 
 // ============================== PATCH NOTES ==============================
     const PATCH_NOTES = [
+  ["5.22.20.12",["💰 In Sell / Sell Troop mode, hovering a unit no longer pops up its health bar — so it doesn't cover the refund amount you'd get."]],
   ["5.22.20.11",["❤ HP bars are now colour-coded: green at full health, yellow when hurt, red when low.",
           "🧱 Fixed a gap in the wall's coloured upgrade edge at inner (L-shaped) corners — the border is now continuous."]],
   ["5.22.20.10",["🔢 The exact HP number now shows alongside the bar whenever a unit takes damage (not just on hover), fading out with the bar after 2.5s."]],

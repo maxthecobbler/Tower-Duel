@@ -170,7 +170,7 @@
     </div>
   </div>
   <div id="menu">
-    <h2>🏰 TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">5.17.13.5</span></h2>
+    <h2>🏰 TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">5.17.13.6</span></h2>
     <div id="sceneSel">
       <button data-scene="forest" class="on">🌲 Forest</button>
       <button data-scene="beach">🏖️ Beach</button>
@@ -477,14 +477,6 @@ function income(side){ return BASE_INCOME + tstat(side,"harvester","inc")*ents.f
 function magicIncome(side){ return BASE_MAGIC + tstat(side,"magicwell","inc")*ents.filter(e=>e.side===side&&e.kind==="magicwell").length; }
 function troopsAlive(side){ return ents.some(e=>e.troop && e.side===side); }
 function anyTroopsAlive(){ return ents.some(e=>e.troop && !e.dead); }
-function weakestEnemyTower(e){                     // 2v2 focus-fire: whole team piles on one enemy tower → snowball
-  let best=null, bh=1e9;
-  for(const o of ents){
-    if(o.dead || o.kind!=="tower" || !foe(o.side,e.side)) continue;
-    if(o.hp<bh){ bh=o.hp; best=o; }
-  }
-  return best;
-}
 function nearestEnemyTower(e){
   let best=null, bd=1e9;
   for(const o of ents){
@@ -1221,12 +1213,13 @@ function updateBattle(dt){
       } else {
         // nothing detected: head for an enemy tower
         let tx, ty;
-        if(NP>=3){                                     // triangle/2v2: head for an enemy tower
-          const tw = NP===4 ? weakestEnemyTower(e) : nearestEnemyTower(e);  // 2v2 teams focus-fire the weakest
+        if(NP===3){                                    // triangle FFA: head for the nearest enemy tower
+          const tw = nearestEnemyTower(e);
           tx = tw?tw.x:e.x; ty = tw?tw.y:e.y;
-        } else {                                        // 2-player: march forward, home in near the tower's column
-          const tower=ents.find(o=>o.kind==="tower" && foe(o.side,e.side) && !o.dead);
-          tx=e.x+(e.side==="p"?100:-100); ty=e.y;
+        } else {                                        // 1v1 & 2v2: march straight forward, home in near the towers' column
+          const tower=NP===4 ? nearestEnemyTower(e)
+                             : ents.find(o=>o.kind==="tower" && foe(o.side,e.side) && !o.dead);
+          tx=e.x+(facesRight(e.side)?100:-100); ty=e.y;
           if(tower && Math.abs(tower.x-e.x)<70){ tx=tower.x; ty=tower.y; }
         }
         if(e.kind==="archer") e.aim=Math.atan2(ty-e.y, tx-e.x);         // face the march direction
@@ -2755,6 +2748,7 @@ function setMsgText(t){ document.getElementById("msg").textContent=t; }
 
 // ============================== PATCH NOTES ==============================
     const PATCH_NOTES = [
+  ["5.17.13.6",["🥾 2v2 fix: troops now march straight forward across the field instead of all converging on the top tower — they only home in on the nearest enemy tower once they've crossed to its side."]],
   ["5.17.13.5",["🔥 NEW: Card MODIFIERS — one-time power-ups you arm during the build phase (a button beside the ⬆ upgrade). They last a single turn, then they're spent. More coming over time.",
           "First modifier: 🔥 Flaming Arrows for the Archer (💰6) — your arrows set the target ablaze for 1 dmg/sec.",
           "🧭 Troops now round obstacles on whichever side they're already closer to (left if more to the left, right if more to the right)."]],

@@ -187,7 +187,7 @@
     </div>
   </div>
   <div id="menu">
-    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">5.22.18.9</span></h2>
+    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">5.22.19.9</span></h2>
     <div id="sceneSel">
       <button data-scene="forest" class="on">Forest</button>
       <button data-scene="beach">Beach</button>
@@ -1033,6 +1033,7 @@ function collideBuildings(e){
 }
 function damage(target,dmg,srcColor){
   if(target.dead) return;                 // never re-trigger death effects (bounty/explosion)
+  target.hpT=HP_SHOW_TIME;                 // being hit reveals the HP bar for a few seconds
   // shield bubbles absorb damage first
   if(target.shield>0){
     const ab=Math.min(target.shield,dmg);
@@ -2529,7 +2530,7 @@ function drawTowerSpr(e){
     ctx.beginPath(); ctx.arc(cx,cy,R+2.5+i*3,0,7); ctx.stroke();
     ctx.globalAlpha=1;
   }
-  drawHpBar(e, cx-13, cy-R-11, 26);
+  if(showBar(e)) drawHpBar(e, cx-13, cy-R-11, 26);   // tower HP follows the same rule (HUD shows it too)
 }
 function wallAt(gx,gy){ return ents.some(e=>!e.dead && e.kind==="wall" && e.gx===gx && e.gy===gy); }
 function drawWall(e){
@@ -2643,15 +2644,17 @@ function drawTroop(e){
 }
 // "Show health" toggle (mirrors the range bar): force HP bars+numbers for a side/both
 let showHealth=null;   // null | "p" (blue) | "b" (red) | "c" (green) | "both"
+const HP_SHOW_TIME=2.5;   // seconds a unit's HP bar lingers after it takes damage
 function healthShownFor(e){
   if(!showHealth) return false;
   if(showHealth==="both") return true;
   return teamCol(e.side)===teamCol(showHealth);   // team-aware: "Blue" covers both blue-team units in 2v2
 }
-// draw the bar for damaged units always, or for any unit whose side has "show health" on
-function showBar(e){ return e.hp<e.maxHp || healthShownFor(e); }
+function hovered(e){ return hover && hyp(hover.x-e.x, hover.y-e.y) <= bodyR(e)+5; }
+// bar shows: recently damaged (battle only — hidden in build mode), hovered, or pinned by Show-Health
+function showBar(e){ return (phase!=="build" && e.hpT>0) || hovered(e) || healthShownFor(e); }
 // the exact HP count appears while hovering that unit, or when "show health" is on for its side
-function hpNumShown(e){ return healthShownFor(e) || (hover && hyp(hover.x-e.x, hover.y-e.y) <= bodyR(e)+5); }
+function hpNumShown(e){ return hovered(e) || healthShownFor(e); }
 function drawHpBar(e,x,y,w){
   x=Math.round(x); y=Math.round(y);
   // outlined frame, bar inside
@@ -2944,6 +2947,7 @@ function loop(now){
     acc+=dt;
     while(acc>=SIM_STEP && phase==="battle"){ updateBattle(SIM_STEP); acc-=SIM_STEP; }
   } else acc=0;
+  for(const e of ents) if(e.hpT>0) e.hpT-=dt;           // HP bars fade out ~2.5s after the last hit
   for(const p of parts){ p.t+=dt; p.x+=(p.vx||0)*dt; p.y+=(p.vy||0)*dt; if(p.vy!==undefined&&!p.flash)p.vy+=60*dt; }
   parts=parts.filter(p=>p.t<p.life);
   for(const t of texts) t.t+=dt;
@@ -2984,6 +2988,8 @@ function setMsgText(t){ document.getElementById("msg").textContent=t; }
 
 // ============================== PATCH NOTES ==============================
     const PATCH_NOTES = [
+  ["5.22.19.9",["❤ HP bars now pop up when a unit takes damage and fade out 2.5s after the last hit, instead of lingering the whole battle — much less clutter. They're hidden entirely during the build phase.",
+          "Hovering a unit and the \"Show health\" toggles still reveal HP any time, as before."]],
   ["5.22.18.9",["⚔️ NEW: \"Sell Troop\" button! Troops can now be sold for 50% of their gold — click the button, then click one of your troops. It only targets troops, so no more mix-ups with the building Sell button.",
           "The regular 💰 Sell button now sells buildings only, keeping the two cleanly separate."]],
   ["5.21.18.9",["❤ NEW: \"Show health\" toggle below the battlefield (like Show ranges) — pin HP bars & numbers for the 🔵 Blue side, 🔴 Red side, or both at once, without hovering."]],

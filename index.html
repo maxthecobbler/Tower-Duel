@@ -187,7 +187,7 @@
     </div>
   </div>
   <div id="menu">
-    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">5.20.18.8</span></h2>
+    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">5.20.18.9</span></h2>
     <div id="sceneSel">
       <button data-scene="forest" class="on">Forest</button>
       <button data-scene="beach">Beach</button>
@@ -2618,22 +2618,26 @@ function drawTroop(e){
     if(e.hp<e.maxHp) drawHpBar(e,x-5,y-15,10);
   }
 }
+// the exact HP count only appears while the cursor is hovering that unit
+function hpNumShown(e){ return hover && hyp(hover.x-e.x, hover.y-e.y) <= bodyR(e)+5; }
 function drawHpBar(e,x,y,w){
   x=Math.round(x); y=Math.round(y);
-  const hp=Math.max(0,Math.ceil(e.hp));
-  // HP number above the bar — bold with full outline for readability
-  ctx.font="bold 8px monospace"; ctx.textAlign="center";
-  const tx=x+w/2, ty=y-3;
-  ctx.fillStyle="#10121c";
-  ctx.fillText(hp,tx-1,ty); ctx.fillText(hp,tx+1,ty);
-  ctx.fillText(hp,tx,ty-1); ctx.fillText(hp,tx,ty+1);
-  ctx.fillStyle=PAL.white; ctx.fillText(hp,tx,ty);
   // outlined frame, bar inside
   px(x-1,y-1,w+2,5,"#10121c");
   px(x,y,w,3,"#2a2f45");
   const fw=Math.max(0,Math.round(w*e.hp/e.maxHp));
   px(x,y,fw,3, e.hp/e.maxHp>.4?PAL.good:"#ff6b6b");
   if(fw>1) px(x,y,fw,1,"rgba(255,255,255,.35)");
+  // HP number above the bar (hover only) — bold with full outline for readability
+  if(hpNumShown(e)){
+    const hp=Math.max(0,Math.ceil(e.hp));
+    ctx.font="bold 8px monospace"; ctx.textAlign="center";
+    const tx=x+w/2, ty=y-3;
+    ctx.fillStyle="#10121c";
+    ctx.fillText(hp,tx-1,ty); ctx.fillText(hp,tx+1,ty);
+    ctx.fillText(hp,tx,ty-1); ctx.fillText(hp,tx,ty+1);
+    ctx.fillStyle=PAL.white; ctx.fillText(hp,tx,ty);
+  }
 }
 
 // range ring shown while the cursor is over a projectile shooter (tower / turret / archer)
@@ -2937,6 +2941,7 @@ function setMsgText(t){ document.getElementById("msg").textContent=t; }
 
 // ============================== PATCH NOTES ==============================
     const PATCH_NOTES = [
+  ["5.20.18.9",["🔢 HP bars are cleaner: the exact HP number now appears only when you hover your cursor over a unit. The little health bars still show as usual when something's damaged."]],
   ["5.20.18.8",["✨ Upgrade looks simplified: every card now shows a single glowing ring — bronze (L2), silver (L3), gold (L4) — just like troops, instead of the assorted studs, crowns, and trims."]],
   ["5.20.17.8",["🔧 Fixed the upgraded harvester's trim covering its spinning windmill — the blades now always draw on top, and the trim moved down to the eave."]],
   ["5.20.17.7",["✨ Upgrades now SHOW: every card gets visibly fancier as it levels — bronze trim at L2, silver at L3, gold with a glow at L4.",

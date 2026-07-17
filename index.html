@@ -23,11 +23,17 @@
     backdrop-filter:blur(2px)}
   #hud .gold{color:var(--accent);font-weight:bold;font-size:1.1em}
   #hud .dim{color:var(--dim);font-size:.9em}
-  #toolbar{display:flex;gap:5px;align-items:stretch;flex-wrap:wrap;justify-content:center;
+  #toolbar{display:flex;flex-direction:column;gap:6px;align-items:stretch;
     margin-top:10px;width:min(96vw,940px);
     background:var(--panel);padding:8px;border-radius:12px;border:1px solid #2c3050;
     transition:opacity .3s}
   #toolbar.away{opacity:.45;pointer-events:none}
+  /* card categories: label on the left, cards flowing to the right */
+  .cardSection{display:flex;align-items:center;gap:8px}
+  .cardSection:not(:last-child){padding-bottom:6px;border-bottom:1px solid #2c3050}
+  .secLabel{flex:0 0 60px;text-align:right;font-size:.6em;letter-spacing:1px;color:var(--dim);
+    font-weight:bold;text-transform:uppercase}
+  .cardGrid{display:flex;flex-wrap:wrap;gap:5px;flex:1;align-items:stretch;justify-content:flex-start}
   .tool{position:relative;background:var(--panel2);border:2px solid #333a5c;border-radius:8px;color:var(--text);
     font-family:inherit;padding:4px 7px;cursor:pointer;text-align:center;min-width:70px;transition:all .1s;user-select:none}
   .tool:hover:not(:disabled):not(.disabled){border-color:var(--accent);transform:translateY(-2px)}
@@ -151,7 +157,9 @@
     .tool .nm{font-size:.6em}
     .tool .cs{font-size:.62em}
     .tool .up{top:-7px;right:-4px;padding:2px 6px;font-size:.62em}   /* bigger tap target */
-    #fight{font-size:1em;padding:8px 18px;min-width:0;flex:1 1 100%}
+    .secLabel{flex-basis:100%;text-align:left;font-size:.62em;margin-bottom:1px}   /* label on its own line */
+    .cardSection{flex-wrap:wrap}
+    #fight{font-size:1em;padding:8px 18px;min-width:0;flex:none}
     #tip{max-width:92vw;font-size:.75em}
     #menu button{font-size:.95em;padding:11px 8px;min-width:0}
     #modeCols{gap:8px;width:96vw}
@@ -187,7 +195,7 @@
     </div>
   </div>
   <div id="menu">
-    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">5.22.20.12</span></h2>
+    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">5.23.20.12</span></h2>
     <div id="sceneSel">
       <button data-scene="forest" class="on">Forest</button>
       <button data-scene="beach">Beach</button>
@@ -2994,6 +3002,7 @@ function setMsgText(t){ document.getElementById("msg").textContent=t; }
 
 // ============================== PATCH NOTES ==============================
     const PATCH_NOTES = [
+  ["5.23.20.12",["🗂️ The card bar is now organized into labelled sections — Buildings, Troops, Spells, and Actions — so it's easier to find what you want at a glance."]],
   ["5.22.20.12",["💰 In Sell / Sell Troop mode, hovering a unit no longer pops up its health bar — so it doesn't cover the refund amount you'd get."]],
   ["5.22.20.11",["❤ HP bars are now colour-coded: green at full health, yellow when hurt, red when low.",
           "🧱 Fixed a gap in the wall's coloured upgrade edge at inner (L-shaped) corners — the border is now continuous."]],
@@ -3308,7 +3317,8 @@ function tipFor(key){
   }
   return html;
 }
-for(const [key,k] of Object.entries(KINDS)){
+function makeCardButton(key){
+  const k=KINDS[key];
   const b=document.createElement("div");
   b.className="tool"; b.id="tool_"+key;
   const cur=k.spell?"🔮":"💰";
@@ -3335,8 +3345,23 @@ for(const [key,k] of Object.entries(KINDS)){
     mb.onclick=ev=>{ ev.stopPropagation(); buyMod(key); showTip(`<b>${md.icon} ${md.label} — 💰${md.cost}</b><br>${md.tip}`); };
     b.appendChild(mb);
   }
-  toolbar.appendChild(b);
+  return b;
 }
+// organized card categories, each its own labelled row
+function addToolSection(label, contents){
+  const sec=document.createElement("div"); sec.className="cardSection";
+  const h=document.createElement("div"); h.className="secLabel"; h.textContent=label; sec.appendChild(h);
+  const grid=document.createElement("div"); grid.className="cardGrid";
+  for(const el of contents) grid.appendChild(el);
+  sec.appendChild(grid); toolbar.appendChild(sec);
+  return grid;
+}
+const CARD_CATS=[
+  ["Buildings", ["wall","harvester","turret","spikes","catapult","duck","magicwell"]],
+  ["Troops",    ["soldier","archer","brute","tank"]],
+  ["Spells",    ["fireball","heal","shield"]],
+];
+for(const [label,keys] of CARD_CATS) addToolSection(label, keys.map(makeCardButton));
 function buyMod(card){                              // arm a one-time card modifier for this turn
   if(!canBuild()) return;
   const mod=MODIFIERS[card]; if(!mod) return;
@@ -3374,7 +3399,6 @@ upBtn.onmouseenter=()=>{
     `range ${cur.range}→${nx.range} · HP ${cur.hp}→${nx.hp}<br>Fires at up to 3 targets per volley.`);
 };
 upBtn.onmouseleave=hideTip;
-toolbar.appendChild(upBtn);
 function buyUpgrade(){
   if(!canBuild()||upgradeQueued) return;
   const t=towerOf(mySide);
@@ -3394,7 +3418,6 @@ sellBtn.innerHTML=`<span class="ic">💰</span><span class="nm">Sell</span><span
 sellBtn.onclick=()=>{ if(sellBtn.classList.contains("disabled"))return; selected=selected==="sell"?null:"sell"; refreshUI(); };
 sellBtn.onmouseenter=()=>showTip(`<b>💰 Sell</b><br>Click one of your buildings to sell it for 50% of its gold cost. The tower is not for sale.`);
 sellBtn.onmouseleave=hideTip;
-toolbar.appendChild(sellBtn);
 // sell-TROOP mode button — same as Sell but only targets troops (no mix-ups)
 const sellTroopBtn=document.createElement("div");
 sellTroopBtn.className="tool"; sellTroopBtn.id="tool_sellTroop";
@@ -3402,10 +3425,11 @@ sellTroopBtn.innerHTML=`<span class="ic">⚔️</span><span class="nm">Sell Troo
 sellTroopBtn.onclick=()=>{ if(sellTroopBtn.classList.contains("disabled"))return; selected=selected==="sellTroop"?null:"sellTroop"; refreshUI(); };
 sellTroopBtn.onmouseenter=()=>showTip(`<b>⚔️ Sell Troop</b><br>Click one of your troops to sell it for 50% of its gold cost. Only affects troops — never your buildings.`);
 sellTroopBtn.onmouseleave=hideTip;
-toolbar.appendChild(sellTroopBtn);
 const fightBtn=document.createElement("button");
 fightBtn.id="fight"; fightBtn.textContent="⚔️ FIGHT!";
 fightBtn.onclick=startBattle;
+// Actions row (tower upgrade + sell tools), then FIGHT spans the full width beneath everything
+addToolSection("Actions", [upBtn, sellBtn, sellTroopBtn]);
 toolbar.appendChild(fightBtn);
 
 function refreshUI(){

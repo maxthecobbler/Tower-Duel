@@ -187,7 +187,7 @@
     </div>
   </div>
   <div id="menu">
-    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">5.22.19.9</span></h2>
+    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">5.22.20.9</span></h2>
     <div id="sceneSel">
       <button data-scene="forest" class="on">Forest</button>
       <button data-scene="beach">Beach</button>
@@ -2536,14 +2536,14 @@ function wallAt(gx,gy){ return ents.some(e=>!e.dead && e.kind==="wall" && e.gx==
 function drawWall(e){
   const x=e.gx*CELL, y=e.gy*CELL;
   const L=wallAt(e.gx-1,e.gy), R=wallAt(e.gx+1,e.gy), U=wallAt(e.gx,e.gy-1), D=wallAt(e.gx,e.gy+1);
-  // full-cell slab; inset edge only where there's no neighbouring wall, so runs merge seamlessly
-  px(x,y,CELL,CELL,PAL.stoneDark);
+  // full-cell slab; the outer edge band is the upgrade trim colour (bronze/silver/gold), stoneDark at L1.
+  // the inset only pulls back on sides with NO neighbouring wall, so the coloured edge merges across runs.
+  px(x,y,CELL,CELL, trimOf(e)||PAL.stoneDark);
   const ix=x+(L?0:2), iy=y+(U?0:2);
   px(ix,iy, CELL-(L?0:2)-(R?0:2), CELL-(U?0:2)-(D?0:2), PAL.stone);
   // brick seams
   px(x+2,y+5,CELL-4,1,PAL.stoneDark); px(x+2,y+10,CELL-4,1,PAL.stoneDark);
   px(x+8,y+2,1,3,PAL.stoneDark); px(x+4,y+6,1,4,PAL.stoneDark); px(x+11,y+6,1,4,PAL.stoneDark); px(x+7,y+11,1,4,PAL.stoneDark);
-  drawUpgradeRing(e,8);                               // upgrade ring
   if(showBar(e)) drawHpBar(e,x+2,y-8,12);
 }
 function drawHarvester(e){
@@ -2589,7 +2589,8 @@ function drawCatapult(e){
   if(showBar(e)) drawHpBar(e,cx-6,cy-9,12);
 }
 function drawTroop(e){
-  const me=facesRight(e.side), body=teamCol(e.side), dark=teamColDark(e.side);
+  // upgraded troops: their darker outline colour becomes the rank trim (bronze/silver/gold)
+  const me=facesRight(e.side), body=teamCol(e.side), dark=trimOf(e)||teamColDark(e.side);
   const bob = Math.floor(e.step)%2 ? 0 : -1;    // walk bob
   const x=e.x, y=e.y+bob;
   // drop shadow
@@ -2600,7 +2601,6 @@ function drawTroop(e){
     ctx.fillStyle=dark; ctx.beginPath(); ctx.arc(x,y,4.5,0,7); ctx.fill();
     ctx.fillStyle=body; ctx.beginPath(); ctx.arc(x,y,3,0,7); ctx.fill();
     px(x-1,y-1,1,1,PAL.white);
-    drawUpgradeRing(e,6,x,y);                     // upgrade ring
     if(showBar(e)) drawHpBar(e,x-4,y-13,8);
   }
   else if(e.kind==="archer"){                    // ▲ triangle (points where it's aiming)
@@ -2611,7 +2611,6 @@ function drawTroop(e){
     ctx.fillStyle=body; ctx.beginPath();
     ctx.moveTo(3,0); ctx.lineTo(-2.5,-3); ctx.lineTo(-2.5,3); ctx.closePath(); ctx.fill();
     ctx.restore();
-    drawUpgradeRing(e,6.5,x,y);                    // upgrade ring
     if(showBar(e)) drawHpBar(e,x-4,y-13,8);
   }
   else if(e.kind==="tank"){                      // 🪖 treads + hull + turret barrel that follows the aim
@@ -2625,7 +2624,6 @@ function drawTroop(e){
     ctx.fillStyle=dark; ctx.beginPath(); ctx.arc(0,0,3.4,0,7); ctx.fill();   // turret
     ctx.fillStyle=body; ctx.beginPath(); ctx.arc(0,0,2.2,0,7); ctx.fill();
     ctx.restore();
-    drawUpgradeRing(e,9,x,y);                                       // upgrade ring
     if(showBar(e)) drawHpBar(e,x-6,y-17,12);
     if(e.cd>0){                                                     // reload bar under the tank
       const f=1-e.cd/tstat(e.side,"tank","cd");
@@ -2638,7 +2636,6 @@ function drawTroop(e){
     px(x-5,y-5,10,10,dark);
     px(x-3.5,y-3.5,7,7,body);
     px(x-2,y-2,2,2,PAL.white);
-    drawUpgradeRing(e,8,x,y);                      // upgrade ring
     if(showBar(e)) drawHpBar(e,x-5,y-15,10);
   }
 }
@@ -2988,6 +2985,7 @@ function setMsgText(t){ document.getElementById("msg").textContent=t; }
 
 // ============================== PATCH NOTES ==============================
     const PATCH_NOTES = [
+  ["5.22.20.9",["✨ New upgrade looks: walls now tint their outer edge band with the rank colour (bronze/silver/gold) — and it merges seamlessly across walls placed next to each other. Troops recolour their darker outline the same way, instead of the glowing ring."]],
   ["5.22.19.9",["❤ HP bars now pop up when a unit takes damage and fade out 2.5s after the last hit, instead of lingering the whole battle — much less clutter. They're hidden entirely during the build phase.",
           "Hovering a unit and the \"Show health\" toggles still reveal HP any time, as before."]],
   ["5.22.18.9",["⚔️ NEW: \"Sell Troop\" button! Troops can now be sold for 50% of their gold — click the button, then click one of your troops. It only targets troops, so no more mix-ups with the building Sell button.",

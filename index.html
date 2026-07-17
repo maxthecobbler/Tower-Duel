@@ -171,7 +171,7 @@
     </div>
   </div>
   <div id="menu">
-    <h2>🏰 TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">5.18.14.7</span></h2>
+    <h2>🏰 TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">5.19.14.7</span></h2>
     <div id="sceneSel">
       <button data-scene="forest" class="on">🌲 Forest</button>
       <button data-scene="beach">🏖️ Beach</button>
@@ -269,6 +269,7 @@ const KINDS = {
   soldier:  {label:"Soldier",  icon:"⚔️", cost:4,  hp:10,  troop:true, spd:32, range:11, dmg:3, cd:0.7, aggro:60},
   archer:   {label:"Archer",   icon:"🏹", cost:6,  hp:9,   troop:true, spd:26, range:66, dmg:2, cd:0.9, aggro:95},
   brute:    {label:"Brute",    icon:"🛡️", cost:10, hp:38,  troop:true, spd:16, range:13, dmg:8, cd:1.2, aggro:38},
+  tank:     {label:"Tank",     icon:"🪖", cost:200,hp:80,  troop:true, spd:16, range:110, dmg:20, cd:7, aggro:120},
   fireball: {label:"Fireball", icon:"🔥", cost:8,  spell:true, dmg:14, dmgBuilding:7, dmgTower:5, radius:32},
   heal:     {label:"Heal",     icon:"💚", cost:6,  spell:true, instant:true, hps:2, dur:6, radius:16},
   shield:   {label:"Shield",   icon:"🫧", cost:8,  spell:true, instant:true, shield:10, radius:32},
@@ -285,6 +286,7 @@ const TECH={
   soldier:  [null,{cost:0,hp:10,dmg:3,cd:0.7}, {cost:8, hp:13,dmg:4,cd:0.62},{cost:14,hp:16,dmg:5,cd:0.55},{cost:22,hp:20,dmg:6,cd:0.48}],
   archer:   [null,{cost:0,hp:9,dmg:2,cd:0.9,range:66},{cost:8,hp:11,dmg:3,cd:0.8,range:74},{cost:14,hp:13,dmg:4,cd:0.7,range:82},{cost:22,hp:16,dmg:5,cd:0.6,range:92}],
   brute:    [null,{cost:0,spd:16,cd:1.2},      {cost:8, spd:20,cd:1.05},     {cost:14,spd:24,cd:0.9},      {cost:22,spd:29,cd:0.75}],
+  tank:     [null,{cost:0,cd:7,dmg:20},        {cost:220,cd:5,dmg:23},       {cost:260,cd:3.5,dmg:26},     {cost:320,cd:2,dmg:30}],   // reload+damage only — speed never upgrades; upgrades cost more than the tank
   fireball: [null,{cost:0,dmg:14,dmgBuilding:7,radius:32},{cost:10,dmg:17,dmgBuilding:9,radius:40},{cost:18,dmg:21,dmgBuilding:11,radius:48},{cost:28,dmg:26,dmgBuilding:13,radius:56}],
   heal:     [null,{cost:0,hps:2,radius:16},    {cost:8, hps:2.5,radius:24},  {cost:14,hps:3,radius:32},    {cost:22,hps:4,radius:40}],
   shield:   [null,{cost:0,radius:32},          {cost:8, radius:40},          {cost:14,radius:48},          {cost:22,radius:56}],
@@ -337,6 +339,7 @@ const TIPS={
   soldier:"10 HP — 3 dmg / 0.7s melee. Speed 32, detection 60.",
   archer:"9 HP — 2 dmg / 0.9s at range 66. Speed 26, detection 95 (spots enemies early).",
   brute:"38 HP — 8 dmg / 1.2s melee. Slow (16) with tiny detection 38: marches straight for the tower.",
+  tank:"80 HP — YOU control it! The cannon follows your mouse; with no card selected, CLICK the battlefield to fire. Shell blast: 20 dmg to troops AND buildings, range 110. Brute-slow (speed never upgrades). Reload 7s → 2s & 30 dmg fully upgraded — upgrades cost more than the tank. Online it aims itself.",
   fireball:"Launches from your tower, lands where placed. 2-tile blast: 14 dmg to troops, 7 to buildings, 5 to towers. Sets trees on fire!",
   heal:"Instant zone (1 tile): heals YOUR troops, harvesters & walls +2 HP/s for 6s. Not towers/turrets.",
   shield:"Instant (2-tile radius): everything of yours inside gains a shield that absorbs the next 10 damage.",
@@ -949,7 +952,7 @@ function nearestEnemyBuilding(e, range){
   return (best && bd<=range) ? {t:best,d:bd} : null;
 }
 // body radius used for surface-to-surface range checks & collision
-function bodyR(o){ return o.kind==="tower"?15 : o.kind==="catapult"?11 : o.building?7 : 3; }
+function bodyR(o){ return o.kind==="tower"?15 : o.kind==="catapult"?11 : o.building?7 : o.kind==="tank"?6 : 3; }
 // priority inside detection radius: enemy troops > money bags > enemy buildings
 function acquireTarget(e, aggro){
   let bestT=null,bdT=1e9, bestB=null,bdB=1e9, bestBag=null,bdBag=1e9;
@@ -1053,6 +1056,30 @@ function lobBoulder(e,target){
     color:"#a5895f", life:d/spd+0.2, flight:d/spd, t0:0, arc:Math.min(34,d*0.14), pkind:"boulder"});
   parts.push({x:sx,y:sy,vx:0,vy:0,life:.1,t:0,size:3,color:PAL.flash,flash:true});
   sfx("shoot");
+}
+// tank: a player-aimed cannon. Manual (mouse) control for YOUR tanks offline;
+// online and bot tanks aim themselves so the lockstep sim stays deterministic.
+function tankManual(e){ return e.side===mySide && mode!=="online"; }
+function fireShell(e,tx,ty){
+  const range=KINDS.tank.range, dmg=tstat(e.side,"tank","dmg");
+  let dx=tx-e.x, dy=ty-e.y, d=hyp(dx,dy)||1;
+  if(d>range){ tx=e.x+dx/d*range; ty=e.y+dy/d*range; d=range; }   // clamp to the cannon's reach
+  const spd=220;
+  e.cd=tstat(e.side,"tank","cd");
+  e.aim=Math.atan2(ty-e.y,tx-e.x);
+  // same siege flight as the catapult (arcs to the target tile), but equal dmg to troops & buildings
+  projs.push({x:e.x, y:e.y-3, vx:(tx-e.x)/d*spd, vy:(ty-e.y)/d*spd,
+    side:e.side, siege:true, tx, ty, aoe:14, dmgB:dmg, dmgT:dmg,
+    color:"#3a3f4a", life:d/spd+0.2, flight:d/spd, t0:0, arc:Math.min(12,d*0.06), pkind:"shell"});
+  parts.push({x:e.x+Math.cos(e.aim)*9, y:e.y-3+Math.sin(e.aim)*9, vx:0,vy:0,life:.1,t:0,size:4,color:PAL.flash,flash:true});
+  shake=Math.min(shake+1.5,8);
+  sfx("shoot");
+}
+function fireMyTanks(x,y){                       // click-to-fire: every loaded tank of yours shoots at the point
+  let fired=false;
+  for(const e of ents)
+    if(!e.dead && e.kind==="tank" && tankManual(e) && e.cd<=0){ fireShell(e,x,y); fired=true; }
+  return fired;
 }
 
 // ============================== FIREBALL SPELL ==============================
@@ -1254,12 +1281,15 @@ function updateBattle(dt){
       const range=tstat(e.side,e.kind,"range");
       const n=acquireTarget(e,k.aggro);           // only reacts inside its detection radius
       if(n){
-        if(e.kind==="archer") e.aim=Math.atan2(n.t.y-e.y, n.t.x-e.x);   // face what it's shooting
+        if(e.kind==="archer" || (e.kind==="tank" && !tankManual(e)))
+          e.aim=Math.atan2(n.t.y-e.y, n.t.x-e.x);  // face what it's shooting
         if(n.bag || n.d>range){                   // bags are walked to (picked up on contact), never attacked
           moveToward(e,n.t.x,n.t.y,spd,dt);        // steers left around ponds/groves in the way
           e.step+=dt*10;
           collideObstacles(e); collideBuildings(e);
           e.x=Math.max(4,Math.min(W-4,e.x)); e.y=Math.max(4,Math.min(H-4,e.y));
+        } else if(e.kind==="tank"){                // tank in range: holds position; manual waits for your click
+          if(!tankManual(e) && e.cd<=0) fireShell(e, n.t.x, n.t.y);
         } else if(e.cd<=0){
           e.cd=tstat(e.side,e.kind,"cd");
           const dmg=tstat(e.side,e.kind,"dmg");
@@ -1282,12 +1312,14 @@ function updateBattle(dt){
           tx=e.x+(facesRight(e.side)?100:-100); ty=e.y;
           if(tower && Math.abs(tower.x-e.x)<70){ tx=tower.x; ty=tower.y; }
         }
-        if(e.kind==="archer") e.aim=Math.atan2(ty-e.y, tx-e.x);         // face the march direction
+        if(e.kind==="archer"||e.kind==="tank") e.aim=Math.atan2(ty-e.y, tx-e.x);   // face the march direction
         moveToward(e,tx,ty,spd,dt);                // steers left around ponds/groves in the way
         e.step+=dt*10;
         collideObstacles(e); collideBuildings(e);
         e.x=Math.max(4,Math.min(W-4,e.x)); e.y=Math.max(4,Math.min(H-4,e.y));
       }
+      // your tank's cannon tracks the mouse (cosmetic — the sim only cares about clicks)
+      if(e.kind==="tank" && tankManual(e) && hover) e.aim=Math.atan2(hover.y-e.y, hover.x-e.x);
       // record velocity so towers/turrets/archers can lead their shots
       e.vx=(e.x-px0)/dt; e.vy=(e.y-py0)/dt;
     }
@@ -2493,6 +2525,25 @@ function drawTroop(e){
     ctx.restore();
     if(e.hp<e.maxHp) drawHpBar(e,x-4,y-13,8);
   }
+  else if(e.kind==="tank"){                      // 🪖 treads + hull + turret barrel that follows the aim
+    const a = e.aim!==undefined ? e.aim : (me?0:Math.PI);
+    px(x-6,y-5,12,4,"#23262e"); px(x-6,y+1,12,4,"#23262e");        // treads
+    for(let i=0;i<4;i++){ px(x-5+i*3,y-4,1,2,"#3d424e"); px(x-5+i*3,y+2,1,2,"#3d424e"); }
+    px(x-5,y-3,10,6,dark);                                          // hull
+    px(x-4,y-2,8,4,body);
+    ctx.save(); ctx.translate(x,y); ctx.rotate(a);
+    ctx.fillStyle="#23262e"; ctx.fillRect(2,-1.25,9,2.5);           // barrel
+    ctx.fillStyle=dark; ctx.beginPath(); ctx.arc(0,0,3.4,0,7); ctx.fill();   // turret
+    ctx.fillStyle=body; ctx.beginPath(); ctx.arc(0,0,2.2,0,7); ctx.fill();
+    ctx.restore();
+    if(e.hp<e.maxHp) drawHpBar(e,x-6,y-17,12);
+    if(e.cd>0){                                                     // reload bar under the tank
+      const f=1-e.cd/tstat(e.side,"tank","cd");
+      px(x-6,y+7,12,2,"#2a2f45"); px(x-6,y+7,Math.round(12*f),2,"#ffa65a");
+    } else if(tankManual(e) && phase==="battle" && Math.floor(animT*2)%2){
+      px(x-1,y-10,3,3,PAL.gold);                                    // blinking READY dot on your loaded tank
+    }
+  }
   else {                                         // ■ square (brute)
     px(x-5,y-5,10,10,dark);
     px(x-3.5,y-3.5,7,7,body);
@@ -2523,6 +2574,7 @@ function rangeOf(e){
   if(e.kind==="tower")  return TOWER_LEVELS[e.level||1].range;
   if(e.kind==="turret") return tstat(e.side,"turret","range");
   if(e.kind==="archer") return tstat(e.side,"archer","range");
+  if(e.kind==="tank")   return KINDS.tank.range;
   return 0;
 }
 let showRanges=null;   // null | "p" (blue) | "b" (red) | "both" — toggled by the range bar
@@ -2710,6 +2762,13 @@ function render(){
       ctx.fillStyle="#2b2b33"; ctx.beginPath(); ctx.arc(p.x,p.y,2.5,0,7); ctx.fill();
       px(p.x-1,p.y-1,1,1,"#8a8a99");
     }
+    else if(p.pkind==="shell"){
+      // tank shell: low fast arc with a ground shadow
+      const h = Math.sin(Math.min(1,p.t0/(p.flight||1))*Math.PI)*(p.arc||8);
+      ctx.fillStyle="rgba(0,0,0,.25)"; ctx.beginPath(); ctx.ellipse(p.x,p.y,2.4,1.2,0,0,7); ctx.fill();
+      ctx.fillStyle="#2b2b33"; ctx.beginPath(); ctx.arc(p.x,p.y-h,2.2,0,7); ctx.fill();
+      px(p.x-1,p.y-h-1,1,1,"#8a8a99");
+    }
     else if(p.pkind==="boulder"){
       // catapult boulder: an arcing rock with a ground shadow beneath it
       const h = Math.sin(Math.min(1,p.t0/(p.flight||1))*Math.PI)*(p.arc||24);
@@ -2810,6 +2869,10 @@ function setMsgText(t){ document.getElementById("msg").textContent=t; }
 
 // ============================== PATCH NOTES ==============================
     const PATCH_NOTES = [
+  ["5.19.14.7",["🪖 NEW CARD: The TANK (💰200) — the first unit YOU control! Its cannon follows your mouse during battle; with no card selected, click the battlefield to fire.",
+          "Shell: 20 dmg to troops AND buildings in a small blast, range 110. Tough (80 HP) but brute-slow — and speed never upgrades.",
+          "Upgrades (pricier than the tank itself): reload 7s → 5 → 3.5 → 2s, damage 20 → 30.",
+          "A reload bar shows under the tank; a gold dot blinks when it's loaded. In online matches tanks aim themselves (keeps both players' games in sync)."]],
   ["5.18.14.7",["🪨 Catapult no longer wastes boulders on walls — its shots arc over them anyway, so it now saves its ammo for towers, turrets, harvesters and other real targets."]],
   ["5.18.13.7",["🎵 NEW: Retro menu music! A looping chiptune (played on the same tiny synth as the sound effects) now sets the mood on the main menu.",
           "🎚️ Three settings sliders: 🔊 sound effects, 🎵 menu music, and 💥 screen shake (0–200%) — all remembered between sessions.",
@@ -3267,7 +3330,10 @@ function refreshUI(){
   const sideTxt = NP===3 ? (mySide==="p"?"🔵 blue":mySide==="b"?"🔴 red":"🟢 green")
                          : (mySide==="p" ? "left 🔵" : "right 🔴");
   if(waitingOrders) msg.textContent="⏳ Orders locked in — waiting for the other players…";
-  else if(phase==="battle" && !RT) msg.textContent="⚔️ Battle in progress…";
+  else if(phase==="battle" && !RT)
+    msg.textContent = ents.some(e=>!e.dead && e.kind==="tank" && tankManual(e))
+      ? "⚔️ Battle! 🪖 Your tank's cannon follows the mouse — CLICK to fire!"
+      : "⚔️ Battle in progress…";
   else if(selected==="sell") msg.textContent=`💰 SELL MODE — ${act} one of your buildings to sell it for half price. ${cancelHint}`;
   else if(selected && KINDS[selected].spell) msg.textContent=`Placing ${KINDS[selected].label} — ${act} ANYWHERE on the map. ${RT?"It fires immediately!":"It launches when the battle starts."}`;
   else if(selected) msg.textContent=`Placing ${KINDS[selected].label} — ${act} a tile on your (${sideTxt}) side. ${cancelHint}`;
@@ -3283,8 +3349,10 @@ cv.addEventListener("mousemove",ev=>{ hover=canvasPos(ev); });
 cv.addEventListener("mouseleave",()=>{ hover=null; });
 cv.addEventListener("click",ev=>{
   ac(); // unlock audio
-  if(!selected||!canBuild()) return;
   const p=canvasPos(ev);
+  // no card in hand during battle → FIRE the tank(s) at the click point
+  if(!selected && phase==="battle" && !over && !menuOpen && mode!=="online"){ fireMyTanks(p.x,p.y); return; }
+  if(!selected||!canBuild()) return;
   if(selected==="sell"){ sellAt(p.gx,p.gy); return; }
   place(selected,p.gx,p.gy);
 });
@@ -3308,7 +3376,10 @@ cv.addEventListener("touchmove",ev=>{
 },{passive:false});
 cv.addEventListener("touchend",ev=>{
   ev.preventDefault();                         // also suppresses the synthetic click (no double-place)
-  if(hover && selected && canBuild()){
+  if(hover && !selected && phase==="battle" && !over && !menuOpen && mode!=="online"){
+    fireMyTanks(hover.x,hover.y);              // tap-to-fire the tank(s)
+  }
+  else if(hover && selected && canBuild()){
     if(selected==="sell") sellAt(hover.gx,hover.gy);
     else place(selected,hover.gx,hover.gy);
   }

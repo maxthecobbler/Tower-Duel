@@ -41,6 +41,12 @@
     padding:1px 5px;cursor:pointer;line-height:1.3}
   .tool .up:hover:not(:disabled){background:var(--good);color:#102412}
   .tool .up:disabled{opacity:.4;cursor:not-allowed}
+  .tool .mod{position:absolute;top:-9px;left:-6px;background:#3a2a18;border:1px solid var(--orange);
+    color:var(--orange);border-radius:8px;font-family:inherit;font-size:.62em;font-weight:bold;
+    padding:1px 4px;cursor:pointer;line-height:1.3}
+  .tool .mod:hover:not(:disabled){background:var(--orange)}
+  .tool .mod.armed{background:var(--orange);color:#2a1a08;box-shadow:0 0 6px var(--orange)}
+  .tool .mod:disabled{opacity:.4;cursor:not-allowed}
   .tool .ic{font-size:1.2em}
   .tool .nm{font-size:.75em;display:block}
   .tool .cs{color:var(--accent);font-size:.75em;font-weight:bold}
@@ -164,7 +170,7 @@
     </div>
   </div>
   <div id="menu">
-    <h2>🏰 TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">5.17.12.5</span></h2>
+    <h2>🏰 TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">5.17.13.5</span></h2>
     <div id="sceneSel">
       <button data-scene="forest" class="on">🌲 Forest</button>
       <button data-scene="beach">🏖️ Beach</button>
@@ -281,6 +287,14 @@ const TECH={
   shield:   [null,{cost:0,radius:32},          {cost:8, radius:40},          {cost:14,radius:48},          {cost:22,radius:56}],
 };
 let techs={p:{},b:{}};
+// One-time-use card MODIFIERS: activate during build (a button beside ⬆), effect lasts ONE turn, then it's spent.
+// More will be added over time (part of the "card" version tier). Starting set:
+const MODIFIERS = {
+  archer: { id:"flame", label:"Flaming Arrows", icon:"🔥", cost:6, burn:3,
+    tip:"One-time (this turn only): your archers' arrows set the target on fire — 1 dmg/sec for 3s." },
+};
+let activeMods = {};                         // activeMods[side][card]=true while that modifier is armed for this turn
+function modArmed(side,card){ return !!(activeMods[side] && activeMods[side][card]); }
 function techLvl(side,kind){ return techs[side][kind]||1; }
 // stat lookup honouring the side's tech level; falls back to base KINDS stats
 function tstat(side,kind,field){
@@ -587,6 +601,7 @@ function costOfSide(side,orders){
         t.gx===o.gx && t.gy===o.gy);
       if(e) s-=Math.floor(KINDS[e.kind].cost*SELL_RATE);
     }
+    else if(o.kind==="mod"){ s+=(MODIFIERS[o.card]?MODIFIERS[o.card].cost:9999); }
     else if(KINDS[o.kind] && KINDS[o.kind].spell){ /* magic, handled by costMagicOf */ }
     else s+=(KINDS[o.kind]?KINDS[o.kind].cost:9999);
   }
@@ -973,7 +988,7 @@ function shoot(e,target,opts){
   const d=hyp(ax-sx,ay-sy)||1;                    // aim FROM the spawn point, not the body center
   projs.push({x:sx,y:sy,vx:(ax-sx)/d*spd,vy:(ay-sy)/d*spd,
     side:e.side, dmg:opts.dmg, aoe:opts.aoe||0, color:opts.color, size:opts.size||1.5, life:1.6,
-    pkind:opts.pkind||"arrow", slow:opts.slow||0});
+    pkind:opts.pkind||"arrow", slow:opts.slow||0, burn:opts.burn||0});
   parts.push({x:e.x,y:e.y-(opts.lift||0),vx:0,vy:0,life:.08,t:0,size:3,color:PAL.flash,flash:true});
   sfx("shoot");
 }
@@ -1171,6 +1186,12 @@ function updateBattle(dt){
   updateMoneybags();
   for(const e of ents){
     if(e.dead) continue;
+    if(e.burnT>0){                                 // burning (flaming arrows): 1 dmg/sec until it dies down
+      e.burnT-=dt; e.burnAcc=(e.burnAcc||0)+dt;
+      while(e.burnAcc>=1 && !e.dead){ damage(e,1,"#ff8c2e"); e.burnAcc-=1; }
+      if(Math.random()<0.4) parts.push({x:e.x+rnd(-3,3),y:e.y-2,vx:rnd(-6,6),vy:rnd(-30,-14),life:rnd(.2,.4),t:0,size:rnd(1,2),color:Math.random()<.5?"#ff8c2e":"#ffd75e"});
+      if(e.dead) continue;
+    }
     e.cd=Math.max(0,e.cd-dt);
 
     if(e.troop){
@@ -1190,7 +1211,8 @@ function updateBattle(dt){
         } else if(e.cd<=0){
           e.cd=tstat(e.side,e.kind,"cd");
           const dmg=tstat(e.side,e.kind,"dmg");
-          if(e.kind==="archer") shoot(e,n.t,{dmg,color:teamCol(e.side),spd:150});
+          if(e.kind==="archer"){ const arm=modArmed(e.side,"archer");   // Flaming Arrows modifier: fiery arrow that ignites the target
+            shoot(e,n.t,{dmg, color:arm?"#ff8c2e":teamCol(e.side), spd:150, burn:arm?MODIFIERS.archer.burn:0}); }
           else {
             damage(n.t,dmg, teamCol(e.side));
             puff(n.t.x,n.t.y,PAL.white,3);
@@ -1318,6 +1340,7 @@ function updateBattle(dt){
       } else {
         damage(hit,p.dmg, teamCol(p.side));
         puff(p.x,p.y,p.color,4);
+        if(p.burn && !hit.dead){ hit.burnT=Math.max(hit.burnT||0, p.burn); hit.burnBy=p.side; }   // flaming arrow ignites
       }
     }
     if(p.x<-8||p.x>W+8||p.y<-8||p.y>H+8) p.life=0;
@@ -1330,6 +1353,7 @@ function updateBattle(dt){
 
 function endBattle(){
   phase="build"; turn++;
+  for(const s of SIDES) activeMods[s]={};          // one-time modifiers are spent after the turn
   const incMe=income(mySide);
   for(const s of SIDES){ golds[s]+=income(s); magics[s]+=magicIncome(s); }
   // shield bubbles wear off at the end of the turn
@@ -1385,6 +1409,7 @@ function resolveOrders(data){
   golds[mySide]+=costOfSide(mySide,myOrders);   // refund both currencies, deduct canonically below
   magics[mySide]+=costMagicOf(myOrders);
   myOrders=[]; upgradeQueued=false; pendingTech={};
+  for(const s of SIDES) activeMods[s]={};         // rebuild armed modifiers canonically from the orders below
   // every client tracks all sides' gold & magic, so each can verify nobody overspent
   for(const side of SIDES){
     const troopOrders=(data[side]||[]).filter(o=>KINDS[o.kind]&&KINDS[o.kind].troop).length;
@@ -1405,6 +1430,10 @@ function resolveOrders(data){
       if(o.kind==="tech"){
         const cur=techLvl(side,o.card);
         if(TECH[o.card] && cur<4){ golds[side]-=TECH[o.card][cur+1].cost; applyTech(side,o.card); }
+        continue;
+      }
+      if(o.kind==="mod"){
+        if(MODIFIERS[o.card]){ golds[side]-=MODIFIERS[o.card].cost; activeMods[side]=activeMods[side]||{}; activeMods[side][o.card]=true; }
         continue;
       }
       if(o.kind==="sell"){
@@ -1505,8 +1534,8 @@ function beginMatch(opts){
   ents=SIDES.map(makeTower); projs=[]; parts=[]; texts=[]; myOrders=[];
   spellsQueued=[]; myMarkers=[]; fireballs=[]; scorches=[];
   fires=[]; healZones=[]; moneybags=[]; upgradeQueued=false; pendingTech={};
-  techs={}; golds={}; magics={};
-  for(const s of SIDES){ techs[s]={}; golds[s]=START_GOLD; magics[s]=START_MAGIC; }
+  techs={}; golds={}; magics={}; activeMods={};
+  for(const s of SIDES){ techs[s]={}; golds[s]=START_GOLD; magics[s]=START_MAGIC; activeMods[s]={}; }
   spawnBag(simRand); spawnBag(simRand);           // two bags on the fresh battlefield
   if(NP>=3) spawnBag(simRand);                      // an extra bag for the larger board
   if(NP===4) spawnBag(simRand);
@@ -1799,13 +1828,26 @@ function dirClear(e,ang,probe){
   }
   return true;
 }
-// walk toward (tx,ty); if a pond/grove blocks the way, veer LEFT until the path ahead is clear
+// walk toward (tx,ty); if a pond/grove blocks the way, veer around the side the troop is already closer to
 function moveToward(e,tx,ty,spd,dt){
   const base=Math.atan2(ty-e.y,tx-e.x), probe=12;
   let ang=base;
   if(!dirClear(e,base,probe)){
-    for(let i=1;i<=9;i++){                          // sweep left in 18° steps (up to ~160°)
-      const a=base - i*(Math.PI/10);
+    const ux=Math.cos(base), uy=Math.sin(base);
+    // find the nearest blocking obstacle ahead, then pick the shorter way around (the side the troop is offset toward)
+    let blocker=null, bd=1e9;
+    for(const o of OBS_CIRCLES){
+      if(o.g && !groveAlive(o.g)) continue;
+      const d=hyp(e.x+ux*probe-o.x, e.y+uy*probe-o.y);
+      if(d < o.r+bodyR(e)+1 && d<bd){ bd=d; blocker=o; }
+    }
+    let dir=-1;                                     // default: veer left
+    if(blocker){
+      const leftness = uy*(e.x-blocker.x) - ux*(e.y-blocker.y);  // >0 = troop is on the LEFT of the obstacle
+      dir = leftness>0 ? -1 : 1;                    // on the left → go left; on the right → go right
+    }
+    for(let i=1;i<=9;i++){                          // sweep the chosen direction in 18° steps (up to ~160°)
+      const a=base + dir*i*(Math.PI/10);
       if(dirClear(e,a,probe)){ ang=a; break; }
       ang=a;
     }
@@ -2129,6 +2171,10 @@ function drawStatusFx(){
     }
     if(e.troop && e.slowT>0){                        // dripping-wet indicator
       px(e.x+3,e.y-7+Math.sin(animT*10)*1.5,1,2,"#7db4ff");
+    }
+    if(e.burnT>0){                                   // on fire: flickering flame above it
+      const h=3+Math.abs(Math.sin(animT*14+e.x))*3;
+      px(e.x-1,e.y-6-h,2,h,"#ff8c2e"); px(e.x-1,e.y-6-h*0.5,2,h*0.5,"#ffd75e");
     }
   }
 }
@@ -2709,6 +2755,9 @@ function setMsgText(t){ document.getElementById("msg").textContent=t; }
 
 // ============================== PATCH NOTES ==============================
     const PATCH_NOTES = [
+  ["5.17.13.5",["🔥 NEW: Card MODIFIERS — one-time power-ups you arm during the build phase (a button beside the ⬆ upgrade). They last a single turn, then they're spent. More coming over time.",
+          "First modifier: 🔥 Flaming Arrows for the Archer (💰6) — your arrows set the target ablaze for 1 dmg/sec.",
+          "🧭 Troops now round obstacles on whichever side they're already closer to (left if more to the left, right if more to the right)."]],
   ["5.17.12.5",["🤝 2v2 teamwork upgrades: you now share your team's whole side — build anywhere on your half, right alongside your teammate.",
           "Your ally's builds for the turn now appear at the START of your build phase, so you can see what they're placing and plan together.",
           "Team colors simplified: 🔵 both blue vs 🔴 both red."]],
@@ -2994,7 +3043,7 @@ for(const [key,k] of Object.entries(KINDS)){
   const cur=k.spell?"🔮":"💰";
   b.innerHTML=`<span class="ic">${k.icon}</span><span class="nm">${k.label} <span class="lvl" id="lvl_${key}"></span></span><span class="cs">${cur}${k.cost}</span>`;
   b.onclick=ev=>{
-    if(ev.target.classList.contains("up")) return;
+    if(ev.target.classList.contains("up")||ev.target.classList.contains("mod")) return;
     if(b.classList.contains("disabled")) return;
     selected = selected===key?null:key; refreshUI();
     if(selected===key) showTip(tipFor(key)); else hideTip();   // tap shows stats (touch has no hover)
@@ -3007,7 +3056,27 @@ for(const [key,k] of Object.entries(KINDS)){
     u.onclick=ev=>{ ev.stopPropagation(); buyTech(key); showTip(tipFor(key)); };
     b.appendChild(u);
   }
+  if(MODIFIERS[key]){                               // one-time modifier button, beside the upgrade ⬆
+    const md=MODIFIERS[key], mb=document.createElement("button");
+    mb.className="mod"; mb.id="mod_"+key; mb.textContent=md.icon;
+    mb.onmouseenter=()=>showTip(`<b>${md.icon} ${md.label} — 💰${md.cost}</b><br>${md.tip}`);
+    mb.onmouseleave=hideTip;
+    mb.onclick=ev=>{ ev.stopPropagation(); buyMod(key); showTip(`<b>${md.icon} ${md.label} — 💰${md.cost}</b><br>${md.tip}`); };
+    b.appendChild(mb);
+  }
   toolbar.appendChild(b);
+}
+function buyMod(card){                              // arm a one-time card modifier for this turn
+  if(!canBuild()) return;
+  const mod=MODIFIERS[card]; if(!mod) return;
+  if(modArmed(mySide,card)) return;                 // already armed this turn
+  if(golds[mySide]<mod.cost) return;
+  golds[mySide]-=mod.cost;
+  activeMods[mySide]=activeMods[mySide]||{}; activeMods[mySide][card]=true;
+  if(mode==="online") myOrders.push({kind:"mod",card});
+  floatText(cellCx(4),cellCx(4),mod.icon+" "+mod.label,"#ff8c2e");
+  sfx("place");
+  refreshUI();
 }
 function buyTech(card){
   if(!canBuild()) return;
@@ -3103,6 +3172,11 @@ function refreshUI(){
         u.textContent="⬆"+c;
         u.disabled = !building || golds[mySide]<c;
       }
+    }
+    if(MODIFIERS[key]){
+      const mb=document.getElementById("mod_"+key), armed=modArmed(mySide,key);
+      mb.classList.toggle("armed", armed);
+      mb.disabled = !building || (!armed && golds[mySide]<MODIFIERS[key].cost) || armed;
     }
   }
   sellBtn.classList.toggle("disabled", !building);

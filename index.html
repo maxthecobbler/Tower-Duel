@@ -171,7 +171,7 @@
     </div>
   </div>
   <div id="menu">
-    <h2>🏰 TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">5.19.14.7</span></h2>
+    <h2>🏰 TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">5.19.15.7</span></h2>
     <div id="sceneSel">
       <button data-scene="forest" class="on">🌲 Forest</button>
       <button data-scene="beach">🏖️ Beach</button>
@@ -339,7 +339,7 @@ const TIPS={
   soldier:"10 HP — 3 dmg / 0.7s melee. Speed 32, detection 60.",
   archer:"9 HP — 2 dmg / 0.9s at range 66. Speed 26, detection 95 (spots enemies early).",
   brute:"38 HP — 8 dmg / 1.2s melee. Slow (16) with tiny detection 38: marches straight for the tower.",
-  tank:"80 HP — YOU control it! The cannon follows your mouse; with no card selected, CLICK the battlefield to fire. Shell blast: 20 dmg to troops AND buildings, range 110. Brute-slow (speed never upgrades). Reload 7s → 2s & 30 dmg fully upgraded — upgrades cost more than the tank. Online it aims itself.",
+  tank:"80 HP — YOU control it! Drive with WASD/arrow keys, aim with the mouse, and with no card selected, CLICK to fire. Shell blast: 20 dmg to troops AND buildings, range 110. Brute-slow (speed never upgrades). Reload 7s → 2s & 30 dmg fully upgraded — upgrades cost more than the tank. Online (and on touch screens) it drives itself.",
   fireball:"Launches from your tower, lands where placed. 2-tile blast: 14 dmg to troops, 7 to buildings, 5 to towers. Sets trees on fire!",
   heal:"Instant zone (1 tile): heals YOUR troops, harvesters & walls +2 HP/s for 6s. Not towers/turrets.",
   shield:"Instant (2-tile radius): everything of yours inside gains a shield that absorbs the next 10 damage.",
@@ -1279,6 +1279,19 @@ function updateBattle(dt){
       e.slowT=Math.max(0,(e.slowT||0)-dt);
       const spd=tstat(e.side,e.kind,"spd")*(e.slowT>0?0.5:1);  // soaked troops move at half speed
       const range=tstat(e.side,e.kind,"range");
+      if(e.kind==="tank" && tankManual(e) && !IS_TOUCH){
+        // YOUR tank: fully player-driven — arrows/WASD move it, the mouse aims, clicks fire.
+        // (Touch devices have no keys, so there the tank keeps the normal auto-march below.)
+        const ddx=(driveKeys.right?1:0)-(driveKeys.left?1:0), ddy=(driveKeys.down?1:0)-(driveKeys.up?1:0);
+        if(ddx||ddy){
+          const m=hyp(ddx,ddy);
+          e.x+=ddx/m*spd*dt; e.y+=ddy/m*spd*dt;
+          e.step+=dt*10;
+          collideObstacles(e); collideBuildings(e);
+          e.x=Math.max(4,Math.min(W-4,e.x)); e.y=Math.max(4,Math.min(H-4,e.y));
+        }
+      }
+      else{
       const n=acquireTarget(e,k.aggro);           // only reacts inside its detection radius
       if(n){
         if(e.kind==="archer" || (e.kind==="tank" && !tankManual(e)))
@@ -1317,6 +1330,7 @@ function updateBattle(dt){
         e.step+=dt*10;
         collideObstacles(e); collideBuildings(e);
         e.x=Math.max(4,Math.min(W-4,e.x)); e.y=Math.max(4,Math.min(H-4,e.y));
+      }
       }
       // your tank's cannon tracks the mouse (cosmetic — the sim only cares about clicks)
       if(e.kind==="tank" && tankManual(e) && hover) e.aim=Math.atan2(hover.y-e.y, hover.x-e.x);
@@ -2869,6 +2883,8 @@ function setMsgText(t){ document.getElementById("msg").textContent=t; }
 
 // ============================== PATCH NOTES ==============================
     const PATCH_NOTES = [
+  ["5.19.15.7",["🪖 The Tank is now FULLY yours: drive it with WASD or the arrow keys! It only moves when you steer (it can still run over money bags).",
+          "Mouse aims, click fires, keys drive. On touch screens (no keyboard) and in online matches it drives itself as before."]],
   ["5.19.14.7",["🪖 NEW CARD: The TANK (💰200) — the first unit YOU control! Its cannon follows your mouse during battle; with no card selected, click the battlefield to fire.",
           "Shell: 20 dmg to troops AND buildings in a small blast, range 110. Tough (80 HP) but brute-slow — and speed never upgrades.",
           "Upgrades (pricier than the tank itself): reload 7s → 5 → 3.5 → 2s, damage 20 → 30.",
@@ -3332,7 +3348,7 @@ function refreshUI(){
   if(waitingOrders) msg.textContent="⏳ Orders locked in — waiting for the other players…";
   else if(phase==="battle" && !RT)
     msg.textContent = ents.some(e=>!e.dead && e.kind==="tank" && tankManual(e))
-      ? "⚔️ Battle! 🪖 Your tank's cannon follows the mouse — CLICK to fire!"
+      ? "⚔️ Battle! 🪖 Drive the tank with WASD/arrows, aim with the mouse, CLICK to fire!"
       : "⚔️ Battle in progress…";
   else if(selected==="sell") msg.textContent=`💰 SELL MODE — ${act} one of your buildings to sell it for half price. ${cancelHint}`;
   else if(selected && KINDS[selected].spell) msg.textContent=`Placing ${KINDS[selected].label} — ${act} ANYWHERE on the map. ${RT?"It fires immediately!":"It launches when the battle starts."}`;
@@ -3358,6 +3374,18 @@ cv.addEventListener("click",ev=>{
 });
 cv.addEventListener("contextmenu",ev=>{ ev.preventDefault(); selected=null; refreshUI(); });
 window.addEventListener("keydown",ev=>{ if(ev.key==="Escape"){ selected=null; refreshUI(); } });
+
+// ---- tank driving keys: arrows + WASD (held-key state; cleared on blur so nothing sticks) ----
+const driveKeys={};
+const DRIVE_MAP={ArrowUp:"up",ArrowDown:"down",ArrowLeft:"left",ArrowRight:"right",
+  w:"up",s:"down",a:"left",d:"right",W:"up",S:"down",A:"left",D:"right"};
+window.addEventListener("keydown",ev=>{
+  if(ev.target && ev.target.tagName==="INPUT") return;   // typing a room code, not driving
+  const d=DRIVE_MAP[ev.key];
+  if(d){ driveKeys[d]=true; if(ev.key.startsWith("Arrow")) ev.preventDefault(); }  // arrows must not scroll the page
+});
+window.addEventListener("keyup",ev=>{ const d=DRIVE_MAP[ev.key]; if(d) driveKeys[d]=false; });
+window.addEventListener("blur",()=>{ for(const k in driveKeys) driveKeys[k]=false; });
 
 // ---- touch: press & drag to aim the ghost, lift to place (mirrors mouse) ----
 function touchPos(t){

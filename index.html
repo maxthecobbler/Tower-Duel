@@ -215,7 +215,7 @@
     </div>
   </div>
   <div id="menu">
-    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">5.26.21.12</span></h2>
+    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">5.26.21.13</span></h2>
     <div id="sceneSel">
       <button data-scene="forest" class="on">Forest</button>
       <button data-scene="beach">Beach</button>
@@ -378,7 +378,7 @@ function applyTech(side,card){
   if(nw.hp!==undefined)                       // hp upgrades buff units already on the field
     for(const e of ents)
       if(!e.dead && e.side===side && e.kind===card){
-        e.hp+=nw.hp-e.maxHp; e.maxHp=nw.hp;
+        e.hp+=nw.hp-e.maxHp; e.maxHp=nw.hp; e.hpT=HP_SHOW_TIME;
         puff(e.x,e.y-4,PAL.gold,4);
       }
   sfx("coin");
@@ -585,7 +585,7 @@ function applyUpgrade(side){
   const t=towerOf(side); if(!t || t.level>=4) return;
   t.level++;
   const L=TOWER_LEVELS[t.level];
-  t.hp+=L.hp-t.maxHp; t.maxHp=L.hp;
+  t.hp+=L.hp-t.maxHp; t.maxHp=L.hp; t.hpT=HP_SHOW_TIME;
   puff(t.x,t.y-10,PAL.gold,12);
   floatText(t.x,t.y-24,"LEVEL "+t.level+"!",PAL.gold);
   sfx("coin");
@@ -1290,8 +1290,10 @@ function updateHealZones(dt){
     for(const e of ents){
       if(e.dead || e.side!==z.side) continue;
       if(!(e.troop || e.kind==="harvester" || e.kind==="wall")) continue;
-      if(e.hp<e.maxHp && hyp(e.x-z.x,e.y-z.y)<=zr+bodyR(e))
+      if(e.hp<e.maxHp && hyp(e.x-z.x,e.y-z.y)<=zr+bodyR(e)){
         e.hp=Math.min(e.maxHp, e.hp+zhps*dt);
+        e.hpT=HP_SHOW_TIME;                        // being healed shows the HP bar, just like taking a hit
+      }
     }
     if(Math.random()<.25)
       parts.push({x:z.x+rnd(-zr,zr)*.8, y:z.y+rnd(-zr,zr)*.8,
@@ -3167,6 +3169,7 @@ function setMsgText(t){ document.getElementById("msg").textContent=t; }
 
 // ============================== PATCH NOTES ==============================
     const PATCH_NOTES = [
+  ["5.26.21.13",["💚 HP bars & numbers now pop up while units are being HEALED too (heal zones, HP upgrades, tower level-ups), fading out 2.5s after — same as when they take damage."]],
   ["5.26.21.12",["🔫 NEW CARD: GUN NEST (💰12) — a machine-gun emplacement built ON TOP of one of your walls!",
           "It needs a gunner: place a Soldier onto the nest to man it (garrisoned soldiers don't count toward the troop limit). Bursts of 20 shots at 1 dmg every 0.1s, then a 10s reload — upgrades take it to 3s reloads and 35-shot magazines. Its RANGE scales with your Soldier level (70 → 100).",
           "Counterplay: enemy archers can snipe the gunner (replace him anytime, the nest survives). Melee can't touch the nest — but breaking the wall beneath destroys it, and the gunner bails out as a soldier at half HP.",

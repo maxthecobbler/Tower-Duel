@@ -171,7 +171,7 @@
     </div>
   </div>
   <div id="menu">
-    <h2>🏰 TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">5.18.13.7</span></h2>
+    <h2>🏰 TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">5.18.14.7</span></h2>
     <div id="sceneSel">
       <button data-scene="forest" class="on">🌲 Forest</button>
       <button data-scene="beach">🏖️ Beach</button>
@@ -331,7 +331,7 @@ const TIPS={
   harvester:"20 HP — Earns +3 gold every turn. Its killer loots 25% of its lifetime earnings — but it EXPLODES on death: 12 dmg to all enemies within 2 tiles!",
   turret:"30 HP — Cannonball: 5 splash dmg every 1.4s, range 90.",
   spikes:"Single-use trap. When an enemy troop steps within ~1 tile, hidden spikes erupt for 15 dmg to every foe in the blast, then the trap is spent. Doesn't block movement.",
-  catapult:"40 HP — Siege engine that targets only enemy BUILDINGS, anywhere on the map. Lobs a boulder: 15 dmg to buildings, 5 to troops in the blast. Slow: fires every 10s (down to every 3s fully upgraded). Upgrades cost more than it does to build.",
+  catapult:"40 HP — Siege engine that targets only enemy BUILDINGS (ignores walls), anywhere on the map. Lobs a boulder: 15 dmg to buildings, 5 to troops in the blast. Slow: fires every 10s (down to every 3s fully upgraded). Upgrades cost more than it does to build.",
   duck:"16 HP — Blue water only! Squirts water at enemy troops (range 70): slows them 50% for 1.6s and deals 0.1 dmg. Ferocious.",
   magicwell:"20 HP — Place on a PURPLE magic pond. Harvests +3 🔮 magic every turn (spells cost magic). Its killer loots 25% of its lifetime earnings!",
   soldier:"10 HP — 3 dmg / 0.7s melee. Speed 32, detection 60.",
@@ -937,11 +937,12 @@ function nearestEnemy(e, troopsOnly=false){
   }
   return best?{t:best,d:bd}:null;
 }
-// catapult targeting: the nearest enemy BUILDING within range (traps excluded — they're hidden)
+// catapult targeting: the nearest enemy BUILDING within range (traps excluded — they're hidden;
+// walls excluded — boulders arc over them, no point wasting shots)
 function nearestEnemyBuilding(e, range){
   let best=null, bd=1e9;
   for(const o of ents){
-    if(o.dead || !foe(o.side,e.side) || !o.building || o.kind==="spikes") continue;
+    if(o.dead || !foe(o.side,e.side) || !o.building || o.kind==="spikes" || o.kind==="wall") continue;
     const d=dist(e,o);
     if(d<bd){ bd=d; best=o; }
   }
@@ -2809,6 +2810,7 @@ function setMsgText(t){ document.getElementById("msg").textContent=t; }
 
 // ============================== PATCH NOTES ==============================
     const PATCH_NOTES = [
+  ["5.18.14.7",["🪨 Catapult no longer wastes boulders on walls — its shots arc over them anyway, so it now saves its ammo for towers, turrets, harvesters and other real targets."]],
   ["5.18.13.7",["🎵 NEW: Retro menu music! A looping chiptune (played on the same tiny synth as the sound effects) now sets the mood on the main menu.",
           "🎚️ Three settings sliders: 🔊 sound effects, 🎵 menu music, and 💥 screen shake (0–200%) — all remembered between sessions.",
           "Tip: drag the 💥 slider and release for a shake preview."]],

@@ -215,7 +215,7 @@
     </div>
   </div>
   <div id="menu">
-    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">5.26.21.14</span></h2>
+    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">5.26.22.14</span></h2>
     <div id="sceneSel">
       <button data-scene="forest" class="on">Forest</button>
       <button data-scene="beach">Beach</button>
@@ -405,7 +405,7 @@ const TIPS={
   brute:"38 HP — 8 dmg / 1.2s melee. Slow (16) with tiny detection 38: marches straight for the tower.",
   tank:"80 HP — YOU control it! Drive with WASD/arrows (or the on-screen joystick on touch), aim with the mouse, and with no card selected, CLICK/tap to fire. Shell blast: 20 dmg to troops AND buildings, range 110. Brute-slow (speed never upgrades). Reload 7s → 2s & 30 dmg fully upgraded — upgrades cost more than the tank. Online it drives itself. Max 1 at once.",
   fireball:"Launches from your tower, lands where placed. 2-tile blast: 14 dmg to troops, 7 to buildings, 5 to towers. Sets trees on fire!",
-  heal:"Instant zone (1 tile): heals YOUR troops, harvesters & walls +2 HP/s for 6s. Not towers/turrets.",
+  heal:"Instant zone (1 tile): heals EVERYTHING of yours +2 HP/s for 6s — troops, buildings, even gun-nest gunners. Only your main tower is excluded.",
   shield:"Instant (2-tile radius): everything of yours inside gains a shield that absorbs the next 10 damage.",
 };
 
@@ -1289,7 +1289,15 @@ function updateHealZones(dt){
     const zr=z.r||KINDS.heal.radius, zhps=z.hps||KINDS.heal.hps;
     for(const e of ents){
       if(e.dead || e.side!==z.side) continue;
-      if(!(e.troop || e.kind==="harvester" || e.kind==="wall")) continue;
+      if(e.kind==="tower") continue;               // heals EVERYTHING of yours except the main tower
+      if(e.kind==="gunnest"){                      // nests: the GUNNER is what gets patched up
+        if(e.gHp>0 && e.gHp<e.gMax && hyp(e.x-z.x,e.y-z.y)<=zr+bodyR(e)){
+          e.gHp=Math.min(e.gMax, e.gHp+zhps*dt);
+          e.hp=e.gHp; e.maxHp=e.gMax;
+          e.hpT=HP_SHOW_TIME;
+        }
+        continue;
+      }
       if(e.hp<e.maxHp && hyp(e.x-z.x,e.y-z.y)<=zr+bodyR(e)){
         e.hp=Math.min(e.maxHp, e.hp+zhps*dt);
         e.hpT=HP_SHOW_TIME;                        // being healed shows the HP bar, just like taking a hit
@@ -3177,6 +3185,7 @@ function setMsgText(t){ document.getElementById("msg").textContent=t; }
 
 // ============================== PATCH NOTES ==============================
     const PATCH_NOTES = [
+  ["5.26.22.14",["💚 The Heal spell now heals EVERYTHING of yours — troops, turrets, harvesters, walls, catapults, ducks, mana wells, even gun-nest gunners. Only the main tower is excluded."]],
   ["5.26.21.14",["🔫 Hovering a manned Gun Nest now shows its gunner's health as a clean number floating out in front of the nest — no bar cluttering the wall."]],
   ["5.26.21.13",["💚 HP bars & numbers now pop up while units are being HEALED too (heal zones, HP upgrades, tower level-ups), fading out 2.5s after — same as when they take damage."]],
   ["5.26.21.12",["🔫 NEW CARD: GUN NEST (💰12) — a machine-gun emplacement built ON TOP of one of your walls!",

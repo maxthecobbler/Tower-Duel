@@ -164,7 +164,7 @@
     </div>
   </div>
   <div id="menu">
-    <h2>🏰 TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">5.16.12.5</span></h2>
+    <h2>🏰 TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">5.17.12.5</span></h2>
     <div id="sceneSel">
       <button data-scene="forest" class="on">🌲 Forest</button>
       <button data-scene="beach">🏖️ Beach</button>
@@ -338,11 +338,11 @@ const PAL = {
 };
 // team colours by side ("c" = 3rd player, green)
 function teamCol(side){
-  if(NP===4) return side==="p"?PAL.you : side==="c"?PAL.ally : side==="b"?PAL.bot : PAL.orange;   // 2v2: p,c blues · b,d warms
+  if(NP===4) return (TEAM[side]===0)?PAL.you:PAL.bot;                 // 2v2: team A (p,c) blue · team B (b,d) red
   return side==="p"?PAL.you : side==="b"?PAL.bot : side==="c"?PAL.green : PAL.orange;
 }
 function teamColDark(side){
-  if(NP===4) return side==="p"?PAL.youDark : side==="c"?PAL.allyDark : side==="b"?PAL.botDark : PAL.orangeDark;
+  if(NP===4) return (TEAM[side]===0)?PAL.youDark:PAL.botDark;
   return side==="p"?PAL.youDark : side==="b"?PAL.botDark : side==="c"?PAL.greenDark : PAL.orangeDark;
 }
 function facesRight(side){ return NP===4 ? (side==="p"||side==="c") : side==="p"; }   // left-half sides aim right (default facing)
@@ -511,13 +511,9 @@ function inTerritory(side,gx,gy){
     const cx=cellCx(gx), cy=cellCx(gy);
     return pointInTri(cx,cy,TRI) && nearestVertexSide(cx,cy,TRI)===side;
   }
-  if(NP===4){                                     // 2v2: your quadrant (left/right half by team, top/bottom by player)
+  if(NP===4){                                     // 2v2: shared team half — you can build anywhere on your team's side
     const left = gx>=0 && gx<=P_MAXCOL, right = gx>=B_MINCOL && gx<COLS;
-    const top = gy < ROWS/2, bot = gy >= ROWS/2;
-    if(side==="p") return left && top;
-    if(side==="c") return left && bot;
-    if(side==="b") return right && top;
-    return right && bot;                           // d
+    return TEAM[side]===0 ? left : right;          // team A (p,c) = whole left · team B (b,d) = whole right
   }
   return side==="p" ? gx>=0&&gx<=P_MAXCOL : gx>=B_MINCOL&&gx<COLS;
 }
@@ -857,6 +853,11 @@ function botBuild3(side){
     if(magics[side]>=KINDS.shield.cost){ magics[side]-=KINDS.shield.cost; spellsQueued.push({side,x:cx,y:cy,kind:"shield"}); }
     else if(magics[side]>=KINDS.heal.cost){ magics[side]-=KINDS.heal.cost; spellsQueued.push({side,x:cx,y:cy,kind:"heal"}); }
   }
+}
+// 2v2 offline: your bot teammate(s) build at the START of the build phase, so you can SEE their placements while you plan
+function allyBuild(){
+  if(mode!=="bot" || NP!==4) return;
+  for(const s of SIDES) if(s!==mySide && sameTeam(s,mySide)) botBuild3(s);
 }
 
 // ============================== COMBAT SIM ==============================
@@ -1351,6 +1352,7 @@ function endBattle(){
     if(isHost){ myReport=rep; checkReports(); }
     else sendMsg({type:"report", rep});
   }
+  if(!over) allyBuild();                            // 2v2: teammate builds now, visible during your build phase
   refreshUI();
 }
 function towerHp(side){ const t=ents.find(e=>e.kind==="tower"&&e.side===side); return t?t.hp:0; }
@@ -1368,7 +1370,8 @@ function startBattle(){
     return;                       // battle starts when all players have committed
   }
   selected=null;
-  if(NP>=3){ for(const s of SIDES) if(s!==mySide) botBuild3(s); }   // 3p FFA & 2v2 use the tower-anchored bot per side
+  if(NP===4){ for(const s of SIDES) if(foe(s,mySide)) botBuild3(s); }  // 2v2: enemies build now; teammates already built at build-phase start
+  else if(NP>=3){ for(const s of SIDES) if(s!==mySide) botBuild3(s); }
   else botBuild();
   launchSpells();
   phase="battle"; battleT=0;
@@ -1513,6 +1516,7 @@ function beginMatch(opts){
   document.getElementById("banner").classList.remove("show");
   document.body.classList.toggle("three", NP===3);
   document.body.classList.toggle("four", NP===4);
+  if(!RT) allyBuild();                              // 2v2: teammate's turn-1 builds are visible from the start
   refreshUI();
 }
 
@@ -2705,6 +2709,9 @@ function setMsgText(t){ document.getElementById("msg").textContent=t; }
 
 // ============================== PATCH NOTES ==============================
     const PATCH_NOTES = [
+  ["5.17.12.5",["🤝 2v2 teamwork upgrades: you now share your team's whole side — build anywhere on your half, right alongside your teammate.",
+          "Your ally's builds for the turn now appear at the START of your build phase, so you can see what they're placing and plan together.",
+          "Team colors simplified: 🔵 both blue vs 🔴 both red."]],
   ["5.16.12.5",["🤝 NEW MODE: 2v2! You and a bot ally hold the left; two bots hold the right. Teammates never damage each other, spells & explosions spare allies, and a team is only knocked out when BOTH its towers fall — last team standing wins.",
           "Troops focus-fire the enemy team's weakest tower, so a team can gang up and break through. (Online 2v2 is coming next.)"]],
   ["4.16.12.5",["🏰 The game is now called TowerFight!"]],
@@ -3071,9 +3078,12 @@ function refreshUI(){
   document.getElementById("cLv").textContent=(towerOf("c")||{level:1}).level;
   document.getElementById("dHp").textContent=Math.max(0,towerHp("d"));
   document.getElementById("dLv").textContent=(towerOf("d")||{level:1}).level;
-  { const cc=teamCol("c");                        // 3rd slot: green in 3p, ally-blue in 2v2
+  { const cc=teamCol("c");                        // 3rd slot: green in 3p, team-blue in 2v2
     document.getElementById("cEmo").style.color=cc;
-    document.getElementById("cHp").style.color=cc; document.getElementById("cLv").style.color=cc; }
+    document.getElementById("cHp").style.color=cc; document.getElementById("cLv").style.color=cc;
+    const dc=teamCol("d");                          // 4th slot (2v2): team-red
+    document.getElementById("dEmo").style.color=dc;
+    document.getElementById("dHp").style.color=dc; document.getElementById("dLv").style.color=dc; }
   const building=canBuild();
   for(const key of Object.keys(KINDS)){
     const b=document.getElementById("tool_"+key);

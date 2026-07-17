@@ -187,7 +187,7 @@
     </div>
   </div>
   <div id="menu">
-    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">5.22.20.9</span></h2>
+    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">5.22.20.10</span></h2>
     <div id="sceneSel">
       <button data-scene="forest" class="on">Forest</button>
       <button data-scene="beach">Beach</button>
@@ -2650,8 +2650,8 @@ function healthShownFor(e){
 function hovered(e){ return hover && hyp(hover.x-e.x, hover.y-e.y) <= bodyR(e)+5; }
 // bar shows: recently damaged (battle only — hidden in build mode), hovered, or pinned by Show-Health
 function showBar(e){ return (phase!=="build" && e.hpT>0) || hovered(e) || healthShownFor(e); }
-// the exact HP count appears while hovering that unit, or when "show health" is on for its side
-function hpNumShown(e){ return hovered(e) || healthShownFor(e); }
+// the exact HP count appears whenever the bar does: on damage (battle), on hover, or via Show-Health
+function hpNumShown(e){ return (phase!=="build" && e.hpT>0) || hovered(e) || healthShownFor(e); }
 function drawHpBar(e,x,y,w){
   x=Math.round(x); y=Math.round(y);
   // outlined frame, bar inside
@@ -2985,6 +2985,7 @@ function setMsgText(t){ document.getElementById("msg").textContent=t; }
 
 // ============================== PATCH NOTES ==============================
     const PATCH_NOTES = [
+  ["5.22.20.10",["🔢 The exact HP number now shows alongside the bar whenever a unit takes damage (not just on hover), fading out with the bar after 2.5s."]],
   ["5.22.20.9",["✨ New upgrade looks: walls now tint their outer edge band with the rank colour (bronze/silver/gold) — and it merges seamlessly across walls placed next to each other. Troops recolour their darker outline the same way, instead of the glowing ring."]],
   ["5.22.19.9",["❤ HP bars now pop up when a unit takes damage and fade out 2.5s after the last hit, instead of lingering the whole battle — much less clutter. They're hidden entirely during the build phase.",
           "Hovering a unit and the \"Show health\" toggles still reveal HP any time, as before."]],

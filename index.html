@@ -7,7 +7,7 @@
 <style>
   :root {
     --bg:#141420; --panel:#1c1e2e; --panel2:#252840; --accent:#ffd75e;
-    --you:#5fcde4; --bot:#ff6b6b; --green:#7ee77a; --text:#e8edf5; --dim:#8a93ad; --good:#6ee77a;
+    --you:#5fcde4; --bot:#ff6b6b; --green:#7ee77a; --orange:#ffa65a; --text:#e8edf5; --dim:#8a93ad; --good:#6ee77a;
   }
   *{box-sizing:border-box;margin:0;padding:0}
   body{background:var(--bg);color:var(--text);font-family:"Segoe UI",system-ui,sans-serif;
@@ -100,6 +100,10 @@
   #rangeBar button.on{opacity:1;border-color:var(--accent);background:#3a3417}
   .three-only{display:none}
   body.three .three-only{display:inline}
+  .four-only{display:none}
+  body.four .four-only{display:inline}
+  .multi{display:none}
+  body.three .multi,body.four .multi{display:inline}
   #notes{position:absolute;inset:0;background:rgba(10,12,22,.96);border-radius:8px;z-index:7;
     display:none;flex-direction:column;padding:14px 18px}
   #notes.show{display:flex}
@@ -147,8 +151,9 @@
     <span style="color:#c9a0ff;font-weight:bold">🔮 <span id="magic">0</span></span>
     <span class="dim">+<span id="magicIncLbl">0</span><span id="magicIncUnit">/turn</span></span>
     <span class="dim">🔵 <b id="pHp" style="color:var(--you)"></b> HP · L<b id="pLv" style="color:var(--you)">1</b></span>
+    <span class="dim multi"><b id="cEmo">●</b> <b id="cHp"></b> HP · L<b id="cLv">1</b></span>
     <span class="dim">🔴 <b id="bHp" style="color:var(--bot)"></b> HP · L<b id="bLv" style="color:var(--bot)">1</b></span>
-    <span class="dim three-only">🟢 <b id="cHp" style="color:var(--green)"></b> HP · L<b id="cLv" style="color:var(--green)">1</b></span>
+    <span class="dim four-only"><b id="dEmo" style="color:var(--orange)">●</b> <b id="dHp" style="color:var(--orange)"></b> HP · L<b id="dLv" style="color:var(--orange)">1</b></span>
   </div>
   <div id="tip"></div>
   <button id="menuBtn" onclick="quitToMenu()">☰ Menu</button>
@@ -159,7 +164,7 @@
     </div>
   </div>
   <div id="menu">
-    <h2>🏰 TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">4.16.12.5</span></h2>
+    <h2>🏰 TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">5.16.12.5</span></h2>
     <div id="sceneSel">
       <button data-scene="forest" class="on">🌲 Forest</button>
       <button data-scene="beach">🏖️ Beach</button>
@@ -169,6 +174,7 @@
     <button onclick="menuBot()">🤖 Play vs Bot (turn-based)</button>
     <button onclick="menuBlitz()">⚡ Blitz vs Bot (real-time!)</button>
     <button onclick="menu3()">🔺 3-Player Free-for-All (vs 2 Bots)</button>
+    <button onclick="menu2v2()">🤝 2v2 (you + bot ally vs 2 Bots)</button>
     <button onclick="menuCreate()">🔒 Create Private Room (2P)</button>
     <button onclick="menuCreate3()">🔺 Create 3-Player Room (online)</button>
     <div class="joinrow">
@@ -202,11 +208,16 @@ const CELL=16, PAD=16;
 let COLS=26, ROWS=13, W=COLS*CELL, H=ROWS*CELL;   // map size (mutable: 3-player uses a bigger board)
 const P_MAXCOL=11, B_MINCOL=14;              // 2-player column territories (12-13 = no man's land)
 // ----- multi-player state -----
-let NP=2;                                    // number of players this match (2 or 3)
-let SIDES=["p","b"];                         // active sides
+let NP=2;                                    // number of players this match (2, 3, or 4)
+let SIDES=["p","b"];                          // active sides
+// TEAM maps each side to a team id. FFA (2p/3p): every side is its own team. 2v2: p,c = team 0; b,d = team 1.
+let TEAM={p:0, b:1};
+function sameTeam(a,b){ return TEAM[a]===TEAM[b]; }
+function foe(a,b){ return TEAM[a]!==TEAM[b]; }   // true when a and b are on opposing teams (i.e. enemies)
 const IS_TOUCH = ('ontouchstart' in window) || (navigator.maxTouchPoints>0);
-const SIDE_META={                            // per-side identity (colour, tint) — "c" is the 3rd player
-  p:{tint:"rgba(95,205,228,0.06)"}, b:{tint:"rgba(255,107,107,0.06)"}, c:{tint:"rgba(126,231,122,0.06)"},
+const SIDE_META={                            // per-side identity (tint) — c=3rd player, d=4th (2v2 ally)
+  p:{tint:"rgba(95,205,228,0.06)"}, b:{tint:"rgba(255,107,107,0.06)"},
+  c:{tint:"rgba(126,231,122,0.06)"}, d:{tint:"rgba(255,166,90,0.06)"},
 };
 // triangle geometry for 3-player mode (field-space pixel coords), rebuilt in setMap
 let TRI=null;
@@ -320,12 +331,21 @@ const PAL = {
   pTint:"rgba(95,205,228,0.06)", bTint:"rgba(255,107,107,0.06)",
   you:"#5fcde4", youDark:"#2e7ea6", bot:"#ff6b6b", botDark:"#a63838",
   green:"#7ee77a", greenDark:"#3a9a48",           // 3rd player
+  ally:"#8a9bff", allyDark:"#4a5ad0",             // 2v2 team-A partner (blue family)
+  orange:"#ffa65a", orangeDark:"#c47331",         // 2v2 team-B partner (warm family)
   stone:"#9aa7c0", stoneDark:"#5c6787", gold:"#ffd75e", grass:"#3d5a45",
   white:"#f4f6fb", flash:"#fff7d6",
 };
 // team colours by side ("c" = 3rd player, green)
-function teamCol(side){ return side==="p"?PAL.you : side==="b"?PAL.bot : PAL.green; }
-function teamColDark(side){ return side==="p"?PAL.youDark : side==="b"?PAL.botDark : PAL.greenDark; }
+function teamCol(side){
+  if(NP===4) return side==="p"?PAL.you : side==="c"?PAL.ally : side==="b"?PAL.bot : PAL.orange;   // 2v2: p,c blues · b,d warms
+  return side==="p"?PAL.you : side==="b"?PAL.bot : side==="c"?PAL.green : PAL.orange;
+}
+function teamColDark(side){
+  if(NP===4) return side==="p"?PAL.youDark : side==="c"?PAL.allyDark : side==="b"?PAL.botDark : PAL.orangeDark;
+  return side==="p"?PAL.youDark : side==="b"?PAL.botDark : side==="c"?PAL.greenDark : PAL.orangeDark;
+}
+function facesRight(side){ return NP===4 ? (side==="p"||side==="c") : side==="p"; }   // left-half sides aim right (default facing)
 
 // ============================== STATE ==============================
 let ents=[], projs=[], parts=[], texts=[];
@@ -340,7 +360,7 @@ let magics={p:0,b:0};                      // magic: harvested from purple ponds
 let mode="bot", mySide="p", oppSide="b";   // online: server assigns side
 let RT=false, rtT=0;                       // Blitz mode: real-time, no turns (vs bot)
 const RT_TICK=6;                           // seconds between income/bot "turns" in Blitz
-function canBuild(){ return !menuOpen && !waitingOrders && (phase==="build" || (RT && phase==="battle")); }
+function canBuild(){ return !menuOpen && !waitingOrders && !!towerOf(mySide) && (phase==="build" || (RT && phase==="battle")); }
 let myOrders=[], waitingOrders=false, menuOpen=true;
 
 // seeded RNG so online battles are identical on both clients
@@ -406,6 +426,12 @@ function makeTower(side){
     return {side, kind:"tower", building:true, gx, gy, gw:2, gh:2, level:1,
       x:tx, y:ty, hp:TOWER_HP, maxHp:TOWER_HP, cd:0};
   }
+  if(NP===4){                                          // 2v2: four corners (p=TL, c=BL, b=TR, d=BR)
+    const gx = (side==="p"||side==="c") ? 0 : COLS-2;
+    const gy = (side==="p"||side==="b") ? 2 : ROWS-5;
+    return {side, kind:"tower", building:true, gx, gy, gw:2, gh:3, level:1,
+      x:gx*CELL+CELL, y:gy*CELL+CELL*1.5, hp:TOWER_HP, maxHp:TOWER_HP, cd:0};
+  }
   const gx = side==="p" ? 0 : COLS-2;
   return {side, kind:"tower", building:true, gx, gy:5, gw:2, gh:3, level:1,
     x:gx*CELL+CELL, y:5*CELL+CELL*1.5, hp:TOWER_HP, maxHp:TOWER_HP, cd:0};
@@ -437,10 +463,18 @@ function income(side){ return BASE_INCOME + tstat(side,"harvester","inc")*ents.f
 function magicIncome(side){ return BASE_MAGIC + tstat(side,"magicwell","inc")*ents.filter(e=>e.side===side&&e.kind==="magicwell").length; }
 function troopsAlive(side){ return ents.some(e=>e.troop && e.side===side); }
 function anyTroopsAlive(){ return ents.some(e=>e.troop && !e.dead); }
+function weakestEnemyTower(e){                     // 2v2 focus-fire: whole team piles on one enemy tower → snowball
+  let best=null, bh=1e9;
+  for(const o of ents){
+    if(o.dead || o.kind!=="tower" || !foe(o.side,e.side)) continue;
+    if(o.hp<bh){ bh=o.hp; best=o; }
+  }
+  return best;
+}
 function nearestEnemyTower(e){
   let best=null, bd=1e9;
   for(const o of ents){
-    if(o.dead || o.kind!=="tower" || o.side===e.side) continue;
+    if(o.dead || o.kind!=="tower" || !foe(o.side,e.side)) continue;
     const d=hyp(o.x-e.x,o.y-e.y); if(d<bd){ bd=d; best=o; }
   }
   return best;
@@ -476,6 +510,14 @@ function inTerritory(side,gx,gy){
   if(NP===3 && TRI){                              // 3-player: your wedge of the triangle (Voronoi of the corners)
     const cx=cellCx(gx), cy=cellCx(gy);
     return pointInTri(cx,cy,TRI) && nearestVertexSide(cx,cy,TRI)===side;
+  }
+  if(NP===4){                                     // 2v2: your quadrant (left/right half by team, top/bottom by player)
+    const left = gx>=0 && gx<=P_MAXCOL, right = gx>=B_MINCOL && gx<COLS;
+    const top = gy < ROWS/2, bot = gy >= ROWS/2;
+    if(side==="p") return left && top;
+    if(side==="c") return left && bot;
+    if(side==="b") return right && top;
+    return right && bot;                           // d
   }
   return side==="p" ? gx>=0&&gx<=P_MAXCOL : gx>=B_MINCOL&&gx<COLS;
 }
@@ -789,7 +831,8 @@ function botBuild3(side){
     if(techLvl(side,card)<4){ const c=TECH[card][techLvl(side,card)+1].cost; if(gold()>=c+10){ golds[side]-=c; applyTech(side,card); } }
   }
   // attack wave: troops spawn just outside the tower, aimed at the field centre → they march at the nearest enemy tower
-  const dx=TRI.mid.x-tw.x, dy=TRI.mid.y-tw.y, m=hyp(dx,dy)||1;
+  const mid = TRI ? TRI.mid : {x:W/2, y:H/2};       // 2v2 has no triangle — aim at the map centre
+  const dx=mid.x-tw.x, dy=mid.y-tw.y, m=hyp(dx,dy)||1;
   const troopKinds = turn>4 ? ["soldier","archer","brute"] : ["soldier","archer"];
   let guard=0;
   while(troopCount(side)<TROOP_LIMIT && guard++<6){
@@ -799,13 +842,28 @@ function botBuild3(side){
     const gx=Math.round((tw.x+dx/m*off+rnd(-6,6))/CELL-0.5), gy=Math.round((tw.y+dy/m*off+rnd(-6,6))/CELL-0.5);
     golds[side]-=KINDS[kind].cost; spawn(side,kind,gx,gy); puff(cellCx(gx),cellCx(gy),teamCol(side),6);
   }
+  // spells: fireball the densest ENEMY cluster; shield/heal own pushes (makes waves actually break through)
+  if(turn>=2 && magics[side]>=KINDS.fireball.cost){
+    const r=tstat(side,"fireball","radius"), targets=ents.filter(e=>!e.dead && foe(e.side,side));
+    let best=null, bs=0;
+    for(const c of targets){ if(c.kind==="tower") continue; let s2=0;
+      for(const o of targets) if(hyp(o.x-c.x,o.y-c.y)<=r) s2+= o.kind==="harvester"?8 : o.kind==="magicwell"?8 : o.kind==="turret"?7 : o.kind==="wall"?2 : o.troop?3 : 1;
+      if(s2>bs){ bs=s2; best=c; } }
+    if(best && bs>=9){ magics[side]-=KINDS.fireball.cost; spellsQueued.push({side,x:best.x,y:best.y,kind:"fireball"}); }
+  }
+  const myWave=ents.filter(e=>e.side===side&&e.troop&&!e.dead);
+  if(myWave.length>=2){
+    const cx=myWave.reduce((s,e)=>s+e.x,0)/myWave.length, cy=myWave.reduce((s,e)=>s+e.y,0)/myWave.length;
+    if(magics[side]>=KINDS.shield.cost){ magics[side]-=KINDS.shield.cost; spellsQueued.push({side,x:cx,y:cy,kind:"shield"}); }
+    else if(magics[side]>=KINDS.heal.cost){ magics[side]-=KINDS.heal.cost; spellsQueued.push({side,x:cx,y:cy,kind:"heal"}); }
+  }
 }
 
 // ============================== COMBAT SIM ==============================
 function nearestEnemy(e, troopsOnly=false){
   let best=null, bd=1e9;
   for(const o of ents){
-    if(o.side===e.side) continue;
+    if(!foe(o.side,e.side)) continue;
     if(troopsOnly && !o.troop) continue;
     const d=dist(e,o);
     if(d<bd){ bd=d; best=o; }
@@ -816,7 +874,7 @@ function nearestEnemy(e, troopsOnly=false){
 function nearestEnemyBuilding(e, range){
   let best=null, bd=1e9;
   for(const o of ents){
-    if(o.dead || o.side===e.side || !o.building || o.kind==="spikes") continue;
+    if(o.dead || !foe(o.side,e.side) || !o.building || o.kind==="spikes") continue;
     const d=dist(e,o);
     if(d<bd){ bd=d; best=o; }
   }
@@ -828,7 +886,7 @@ function bodyR(o){ return o.kind==="tower"?15 : o.kind==="catapult"?11 : o.build
 function acquireTarget(e, aggro){
   let bestT=null,bdT=1e9, bestB=null,bdB=1e9, bestBag=null,bdBag=1e9;
   for(const o of ents){
-    if(o.dead || o.side===e.side || o.kind==="spikes") continue;   // traps are hidden — never targeted
+    if(o.dead || !foe(o.side,e.side) || o.kind==="spikes") continue;   // traps are hidden — never targeted
     const d=dist(e,o) - bodyR(o);
     if(d>aggro) continue;
     if(o.troop){ if(d<bdT){bdT=d;bestT=o;} }
@@ -846,7 +904,7 @@ function acquireTarget(e, aggro){
 // enemy buildings physically block troops (walls actually wall things off)
 function collideBuildings(e){
   for(const o of ents){
-    if(o.dead || !o.building || o.side===e.side || o.kind==="spikes") continue;  // troops walk over traps
+    if(o.dead || !o.building || !foe(o.side,e.side) || o.kind==="spikes") continue;  // troops walk over traps
 
     const r=bodyR(o)+3;
     const dx=e.x-o.x, dy=e.y-o.y, d=hyp(dx,dy);
@@ -872,7 +930,7 @@ function damage(target,dmg,srcColor){
     if(target.kind==="harvester"||target.kind==="magicwell"){
       const bounty=Math.floor((target.harvested||0)*0.25);
       if(bounty>0){
-        const looter = target.side==="p" ? "b" : "p";
+        const looter = SIDES.find(s=>foe(s,target.side)) || (target.side==="p"?"b":"p");   // bounty to an enemy, never a teammate
         const magic = target.kind==="magicwell";
         if(magic) magics[looter]+=bounty; else golds[looter]+=bounty;
         floatText(target.x, target.y-14, "+"+bounty+(magic?" 🔮":" 💰"), magic?"#c9a0ff":PAL.gold);
@@ -892,12 +950,12 @@ function damage(target,dmg,srcColor){
           size:rnd(1,2.5), color:Math.random()<.5?"#ffd75e":"#c9a24b"});
       }
       for(const o of ents){
-        if(o.dead || o===target || o.side===target.side) continue;
+        if(o.dead || o===target || sameTeam(o.side,target.side)) continue;
         if(hyp(o.x-target.x,o.y-target.y) <= 32+bodyR(o)) damage(o,12,"#ffd75e");
       }
     }
     if(target.kind==="tower"){
-      if(NP===3) eliminatePlayer(target.side);
+      if(NP>=3) eliminatePlayer(target.side);      // 3p FFA & 2v2 both eliminate on tower death
       else endGame(target.side==="b");
     }
   }
@@ -935,7 +993,7 @@ function launchSpells(){
     const k=KINDS[s.kind||"fireball"];
     if(k.instant){ castInstant(s); continue; }
     const tower=ents.find(e=>e.kind==="tower" && e.side===s.side);
-    const x0=tower?tower.x:(s.side==="p"?CELL:W-CELL), y0=tower?tower.y-10:6.5*CELL;
+    const x0=tower?tower.x:(facesRight(s.side)?CELL:W-CELL), y0=tower?tower.y-10:6.5*CELL;
     const d=hyp(s.x-x0,s.y-y0);
     fireballs.push({kind:s.kind||"fireball", side:s.side, x0,y0, tx:s.x, ty:s.y, t:0, dur:Math.max(.55, d/190)});
   }
@@ -1046,7 +1104,7 @@ function spellImpact(f){
   scorches.push({x:f.tx,y:f.ty,t:0,life:7});
   // full damage to enemy troops, reduced vs buildings, minimal vs the tower
   for(const e of ents){
-    if(e.dead || e.side===f.side) continue;
+    if(e.dead || !foe(e.side,f.side)) continue;
     if(hyp(e.x-f.tx,e.y-f.ty) <= radius+bodyR(e)-3){
       const dmg = e.kind==="tower" ? KINDS.fireball.dmgTower : e.building ? dmgB : dmgT;
       damage(e, dmg, "#ff9c40");
@@ -1140,11 +1198,11 @@ function updateBattle(dt){
       } else {
         // nothing detected: head for an enemy tower
         let tx, ty;
-        if(NP===3){                                    // triangle: make straight for the nearest enemy tower
-          const tw=nearestEnemyTower(e);
+        if(NP>=3){                                     // triangle/2v2: head for an enemy tower
+          const tw = NP===4 ? weakestEnemyTower(e) : nearestEnemyTower(e);  // 2v2 teams focus-fire the weakest
           tx = tw?tw.x:e.x; ty = tw?tw.y:e.y;
         } else {                                        // 2-player: march forward, home in near the tower's column
-          const tower=ents.find(o=>o.kind==="tower" && o.side!==e.side && !o.dead);
+          const tower=ents.find(o=>o.kind==="tower" && foe(o.side,e.side) && !o.dead);
           tx=e.x+(e.side==="p"?100:-100); ty=e.y;
           if(tower && Math.abs(tower.x-e.x)<70){ tx=tower.x; ty=tower.y; }
         }
@@ -1189,10 +1247,10 @@ function updateBattle(dt){
       // single-use trap: erupts when an enemy troop steps into the blast, hitting every foe inside
       const rad=tstat(e.side,"spikes","rad");
       let armed=false;
-      for(const o of ents){ if(!o.dead && o.troop && o.side!==e.side && dist(e,o)<=rad){ armed=true; break; } }
+      for(const o of ents){ if(!o.dead && o.troop && foe(o.side,e.side) && dist(e,o)<=rad){ armed=true; break; } }
       if(armed){
         const dmg=tstat(e.side,"spikes","dmg"), col=teamCol(e.side);
-        for(const o of ents) if(!o.dead && o.troop && o.side!==e.side && dist(e,o)<=rad) damage(o,dmg,col);
+        for(const o of ents) if(!o.dead && o.troop && foe(o.side,e.side) && dist(e,o)<=rad) damage(o,dmg,col);
         floatText(e.x,e.y-10,"SPIKES!",col);
         spikePop(e.x,e.y,col);
         e.dead=true;
@@ -1202,7 +1260,7 @@ function updateBattle(dt){
       const L=TOWER_LEVELS[e.level||1];
       if(e.cd<=0){
         // multi-targeting: each volley fires at up to 3 nearest enemy troops in range
-        const targets=ents.filter(o=>o.troop && !o.dead && o.side!==e.side && dist(e,o)<=L.range)
+        const targets=ents.filter(o=>o.troop && !o.dead && foe(o.side,e.side) && dist(e,o)<=L.range)
           .sort((a,b)=>dist(e,a)-dist(e,b)).slice(0,3);
         if(targets.length){
           e.cd=L.cd;
@@ -1222,7 +1280,7 @@ function updateBattle(dt){
         p.life=0;
         boom(p.tx,p.ty,"#a5895f",16,true);
         for(const o of ents){
-          if(o.dead||o.side===p.side) continue;
+          if(o.dead||!foe(o.side,p.side)) continue;
           if(hyp(o.x-p.tx,o.y-p.ty)<=p.aoe) damage(o, o.building?p.dmgB:p.dmgT, teamCol(p.side));
         }
       }
@@ -1231,7 +1289,7 @@ function updateBattle(dt){
     if(Math.random()<.5) parts.push({x:p.x,y:p.y,vx:0,vy:0,life:.15,t:0,size:1,color:p.color});
     let hit=null;
     for(const e of ents){
-      if(e.dead || e.side===p.side) continue;
+      if(e.dead || !foe(e.side,p.side)) continue;
       const r = e.building ? 8 : 6.5;
       if(Math.abs(e.x-p.x)<r && Math.abs(e.y-p.y)<r){ hit=e; break; }
     }
@@ -1240,7 +1298,7 @@ function updateBattle(dt){
       if(p.slow){                                  // duck water: SPLASHES — soaks every enemy troop nearby
         let soaked=0;
         for(const o of ents){
-          if(o.dead || o.side===p.side || !o.troop) continue;
+          if(o.dead || !foe(o.side,p.side) || !o.troop) continue;
           if(hyp(o.x-p.x,o.y-p.y)<=16){
             o.slowT=Math.max(o.slowT||0,p.slow);
             if(p.dmg>0) damage(o,p.dmg,SCENE.proj.color);
@@ -1253,7 +1311,7 @@ function updateBattle(dt){
       else if(p.aoe){
         boom(p.x,p.y,PAL.gold,12);
         for(const e of ents){
-          if(e.dead||e.side===p.side) continue;
+          if(e.dead||!foe(e.side,p.side)) continue;
           if(dist(e,p)<=p.aoe) damage(e,p.dmg, teamCol(p.side));
         }
       } else {
@@ -1310,7 +1368,7 @@ function startBattle(){
     return;                       // battle starts when all players have committed
   }
   selected=null;
-  if(NP===3){ for(const s of SIDES) if(s!==mySide) botBuild3(s); }
+  if(NP>=3){ for(const s of SIDES) if(s!==mySide) botBuild3(s); }   // 3p FFA & 2v2 use the tower-anchored bot per side
   else botBuild();
   launchSpells();
   phase="battle"; battleT=0;
@@ -1384,20 +1442,22 @@ function endGame(pSideWon){                     // true = side "p" tower fell? n
   setTimeout(()=>b.classList.add("show"), 900);
   refreshUI();
 }
-const SIDE_NAME={p:"Blue",b:"Red",c:"Green"};
-function eliminatePlayer(side){
+const SIDE_NAME={p:"Blue",b:"Red",c:"Green",d:"Orange"};
+function aliveTeams(){ return [...new Set(aliveSides().map(s=>TEAM[s]))]; }
+function eliminatePlayer(side){                   // a player's tower fell: scatter their forces; a TEAM is out when all its towers fall
   if(!SIDES.includes(side)) return;
   SIDES=SIDES.filter(s=>s!==side);
   for(const e of ents) if(!e.dead && e.side===side && e.kind!=="tower"){ e.dead=true; puff(e.x,e.y,teamCol(side),4); }
   ents=ents.filter(e=>!e.dead);
   floatText(W/2, 40, SIDE_NAME[side]+" is out!", teamCol(side));
-  const alive=aliveSides();
-  if(alive.length<=1 || side===mySide) endGame3(alive.length===1?alive[0]:null);
+  const teams=aliveTeams();
+  if(teams.length<=1) endGameTeam(teams.length===1?teams[0]:null);   // last team standing wins
+  else if(!teams.includes(TEAM[mySide])) endGameTeam(null);          // my team is out (still >1 enemy team, e.g. 3p FFA) → defeat now
 }
-function endGame3(winner){                       // 3-player: last tower standing wins
+function endGameTeam(winnerTeam){                 // team-based finish (3-player FFA & 2v2)
   over=true; phase="over";
   const b=document.getElementById("banner"), t=document.getElementById("bannerText");
-  const iWon = winner===mySide;
+  const iWon = winnerTeam!==null && winnerTeam===TEAM[mySide];
   t.textContent = iWon ? "🎉 VICTORY!" : "💀 DEFEAT";
   t.style.color = iWon ? "var(--good)" : "var(--bot)";
   setTimeout(()=>b.classList.add("show"), 900);
@@ -1430,9 +1490,11 @@ function backToMenu(){
 function beginMatch(opts){
   mode=opts.mode; mySide=opts.side||"p"; oppSide=mySide==="p"?"b":"p";
   RT=!!opts.rt; rtT=0;
-  NP = opts.players===3 ? 3 : 2;
-  SIDES = NP===3 ? ["p","b","c"] : ["p","b"];
-  setMap(NP===3 ? 34 : 26, NP===3 ? 30 : 13);      // 3-player uses a bigger, taller board for the triangle
+  NP = opts.players===4 ? 4 : opts.players===3 ? 3 : 2;
+  SIDES = NP===4 ? ["p","b","c","d"] : NP===3 ? ["p","b","c"] : ["p","b"];
+  TEAM = NP===4 ? {p:0,c:0,b:1,d:1} : {};          // 2v2: p,c vs b,d. Otherwise FFA (each side its own team).
+  if(NP!==4) for(const s of SIDES) TEAM[s]=SIDES.indexOf(s);
+  setMap(NP===3 ? 34 : NP===4 ? 26 : 26, NP===3 ? 30 : NP===4 ? 20 : 13);  // 2v2: taller board, two towers per side
   regenDecor();                                     // battlefield tufts/flowers + border for the current size
   const seed = opts.seed!==undefined ? opts.seed : Math.floor(Math.random()*2**31);
   simRand=mulberry32(seed);
@@ -1443,12 +1505,14 @@ function beginMatch(opts){
   techs={}; golds={}; magics={};
   for(const s of SIDES){ techs[s]={}; golds[s]=START_GOLD; magics[s]=START_MAGIC; }
   spawnBag(simRand); spawnBag(simRand);           // two bags on the fresh battlefield
-  if(NP===3) spawnBag(simRand);                    // an extra bag for the larger board
+  if(NP>=3) spawnBag(simRand);                      // an extra bag for the larger board
+  if(NP===4) spawnBag(simRand);
   turn=1; phase=RT?"battle":"build"; battleT=0; over=false; selected=null; waitingOrders=false;
   menuOpen=false;
   document.getElementById("menu").classList.add("hidden");
   document.getElementById("banner").classList.remove("show");
   document.body.classList.toggle("three", NP===3);
+  document.body.classList.toggle("four", NP===4);
   refreshUI();
 }
 
@@ -1912,7 +1976,7 @@ function drawManaGeode(e){                          // mountains: a cracked rock
   }
 }
 function drawMagicWell(e){
-  const me=e.side==="p", team=teamCol(e.side);
+  const me=facesRight(e.side), team=teamCol(e.side);
   const bob=Math.sin(animT*2+e.x)*0.8;
   if(SCENE.well==="clam")       drawManaClam(e);
   else if(SCENE.well==="geode") drawManaGeode(e);
@@ -1928,7 +1992,7 @@ function drawMagicWell(e){
   if(e.hp<e.maxHp) drawHpBar(e,e.x-6,e.y-16,12);
 }
 function drawGoat(e){
-  const me=e.side==="p", team=teamCol(e.side), dir=me?1:-1;
+  const me=facesRight(e.side), team=teamCol(e.side), dir=me?1:-1;
   const bob=Math.sin(animT*2.4+e.x)*0.6, y=e.y+bob;
   px(e.x-2,y+2,1,3,"#9a917d"); px(e.x+2,y+2,1,3,"#9a917d");                          // legs
   ctx.fillStyle="#d8d2c4"; ctx.beginPath(); ctx.ellipse(e.x,y,4.6,3.2,0,0,7); ctx.fill();      // body
@@ -1944,7 +2008,7 @@ function drawGoat(e){
   if(e.hp<e.maxHp) drawHpBar(e,e.x-6,y-12,12);
 }
 function drawCrab(e){
-  const me=e.side==="p", team=teamCol(e.side);
+  const me=facesRight(e.side), team=teamCol(e.side);
   const bob=Math.sin(animT*3+e.x)*0.5, y=e.y+bob, wig=Math.sin(animT*8+e.x)*0.6;
   ctx.strokeStyle="#c24a28"; ctx.lineWidth=1;                                        // legs
   for(let i=-1;i<=1;i++){
@@ -1963,7 +2027,7 @@ function drawCrab(e){
 function drawDuck(e){
   if(SCENE.unit.sprite==="goat"){ drawGoat(e); return; }
   if(SCENE.unit.sprite==="crab"){ drawCrab(e); return; }
-  const me=e.side==="p", team=teamCol(e.side);
+  const me=facesRight(e.side), team=teamCol(e.side);
   const bob=Math.sin(animT*2.4+e.x)*1.2;
   const y=e.y+bob;
   // ripples
@@ -1984,7 +2048,7 @@ function drawDuck(e){
   if(e.hp<e.maxHp) drawHpBar(e,e.x-6,y-14,12);
 }
 function drawSpikes(e){
-  const me=e.side==="p", team=teamCol(e.side);
+  const me=facesRight(e.side), team=teamCol(e.side);
   // faint team-tinted ring marks it as your trap without shouting
   ctx.globalAlpha=.28; ctx.strokeStyle=team; ctx.lineWidth=1;
   ctx.beginPath(); ctx.ellipse(e.x,e.y,7.5,5,0,0,7); ctx.stroke(); ctx.globalAlpha=1;
@@ -2219,7 +2283,7 @@ function drawForestBorder(){
 }
 
 function drawTowerSpr(e){
-  const me=e.side==="p", lite=teamCol(e.side), dark=teamColDark(e.side);
+  const me=facesRight(e.side), lite=teamCol(e.side), dark=teamColDark(e.side);
   const cx=e.x, cy=e.y, R=15;
   // drop shadow
   ctx.fillStyle="rgba(0,0,0,.28)"; ctx.beginPath(); ctx.arc(cx+2,cy+3,R,0,7); ctx.fill();
@@ -2264,7 +2328,7 @@ function drawWall(e){
   if(e.hp<e.maxHp) drawHpBar(e,x+2,y-8,12);
 }
 function drawHarvester(e){
-  const x=e.gx*CELL,y=e.gy*CELL, me=e.side==="p";
+  const x=e.gx*CELL,y=e.gy*CELL, me=facesRight(e.side);
   px(x+3,y+8,10,7,me?"#3a6e5a":"#6e3a3a");     // hut
   px(x+2,y+6,12,3,PAL.stoneDark);              // roof
   const a=animT*4+(e.gx+e.gy);                 // spinning blades
@@ -2277,7 +2341,7 @@ function drawHarvester(e){
   if(e.hp<e.maxHp) drawHpBar(e,x+2,y-8,12);
 }
 function drawTurret(e){
-  const x=e.gx*CELL,y=e.gy*CELL, me=e.side==="p", col=teamCol(e.side);
+  const x=e.gx*CELL,y=e.gy*CELL, me=facesRight(e.side), col=teamCol(e.side);
   px(x+3,y+9,10,6,PAL.stoneDark);
   px(x+4,y+5,8,7,PAL.stone);
   const a = e.aim!==undefined?e.aim:(me?0:Math.PI);
@@ -2293,7 +2357,7 @@ function drawCatapult(e){
   px(cx-12,cy+7,3,2,"#241812"); px(cx+9,cy+7,3,2,"#241812");
   px(cx-12,cy+1,24,4,"#6a4a2a"); px(cx-12,cy+1,24,1,"#8a6a3f");
   // throwing arm angled toward the aim; a rock in the bucket
-  const a=e.aim!==undefined?e.aim:(e.side==="p"?0:Math.PI), sw=Math.sin(animT*2+e.x)*0.12;
+  const a=e.aim!==undefined?e.aim:(facesRight(e.side)?0:Math.PI), sw=Math.sin(animT*2+e.x)*0.12;
   const bx=cx+Math.cos(a+sw)*9, by=cy-6+Math.sin(a+sw)*3;
   ctx.strokeStyle="#7a5a34"; ctx.lineWidth=2.4; ctx.lineCap="round";
   ctx.beginPath(); ctx.moveTo(cx,cy-1); ctx.lineTo(bx,by); ctx.stroke();
@@ -2303,7 +2367,7 @@ function drawCatapult(e){
   if(e.hp<e.maxHp) drawHpBar(e,cx-6,cy-9,12);
 }
 function drawTroop(e){
-  const me=e.side==="p", body=teamCol(e.side), dark=teamColDark(e.side);
+  const me=facesRight(e.side), body=teamCol(e.side), dark=teamColDark(e.side);
   const bob = Math.floor(e.step)%2 ? 0 : -1;    // walk bob
   const x=e.x, y=e.y+bob;
   // drop shadow
@@ -2641,6 +2705,8 @@ function setMsgText(t){ document.getElementById("msg").textContent=t; }
 
 // ============================== PATCH NOTES ==============================
     const PATCH_NOTES = [
+  ["5.16.12.5",["🤝 NEW MODE: 2v2! You and a bot ally hold the left; two bots hold the right. Teammates never damage each other, spells & explosions spare allies, and a team is only knocked out when BOTH its towers fall — last team standing wins.",
+          "Troops focus-fire the enemy team's weakest tower, so a team can gang up and break through. (Online 2v2 is coming next.)"]],
   ["4.16.12.5",["🏰 The game is now called TowerFight!"]],
   ["3.16.12.5",["🪨 The Catapult is a big siege engine — it now takes up 2 tiles side by side, so you'll need two free adjacent spaces to place one."]],
   ["3.16.11.5",["🪨 Catapult blast radius now matches the Heal spell's, and it stays the same as you upgrade — upgrades only speed up the fire rate and raise damage, not the blast size."]],
@@ -2812,6 +2878,7 @@ function checkReports(){
 function menuBot(){ cleanupNet(); beginMatch({mode:"bot"}); }
 function menuBlitz(){ cleanupNet(); beginMatch({mode:"bot", rt:true}); }
 function menu3(){ cleanupNet(); beginMatch({mode:"bot", players:3}); }
+function menu2v2(){ cleanupNet(); beginMatch({mode:"bot", players:4}); }
 function menuCreate(){ hostRoom(2); }
 function menuCreate3(){ hostRoom(3); }
 function hostRoom(size){
@@ -3002,6 +3069,11 @@ function refreshUI(){
   document.getElementById("bLv").textContent=(towerOf("b")||{level:1}).level;
   document.getElementById("cHp").textContent=Math.max(0,towerHp("c"));
   document.getElementById("cLv").textContent=(towerOf("c")||{level:1}).level;
+  document.getElementById("dHp").textContent=Math.max(0,towerHp("d"));
+  document.getElementById("dLv").textContent=(towerOf("d")||{level:1}).level;
+  { const cc=teamCol("c");                        // 3rd slot: green in 3p, ally-blue in 2v2
+    document.getElementById("cEmo").style.color=cc;
+    document.getElementById("cHp").style.color=cc; document.getElementById("cLv").style.color=cc; }
   const building=canBuild();
   for(const key of Object.keys(KINDS)){
     const b=document.getElementById("tool_"+key);

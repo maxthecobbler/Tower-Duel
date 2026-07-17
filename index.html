@@ -89,16 +89,16 @@
   #sceneSel button{min-width:0;padding:7px 13px;font-size:.82em;opacity:.55;transition:opacity .1s}
   #sceneSel button:hover{opacity:.85}
   #sceneSel button.on{opacity:1;border-color:var(--accent);background:#3a3417}
-  #soundRow{display:flex;align-items:center;gap:8px;color:var(--dim);font-size:.85em;margin-bottom:2px}
-  #soundRow input[type=range]{-webkit-appearance:none;appearance:none;width:150px;height:8px;
+  .soundRow{display:flex;align-items:center;gap:8px;color:var(--dim);font-size:.85em;margin-bottom:2px}
+  .soundRow input[type=range]{-webkit-appearance:none;appearance:none;width:150px;height:8px;
     border-radius:5px;background:#333a5c;cursor:pointer;outline:none}
-  #soundRow input[type=range]::-webkit-slider-runnable-track{height:8px;border-radius:5px;background:transparent}
-  #soundRow input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;margin-top:-3px;
+  .soundRow input[type=range]::-webkit-slider-runnable-track{height:8px;border-radius:5px;background:transparent}
+  .soundRow input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;margin-top:-3px;
     width:14px;height:14px;border-radius:50%;background:#f4f6fb;border:2px solid var(--accent);cursor:pointer}
-  #soundRow input[type=range]::-moz-range-track{height:8px;border-radius:5px;background:transparent}
-  #soundRow input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;
+  .soundRow input[type=range]::-moz-range-track{height:8px;border-radius:5px;background:transparent}
+  .soundRow input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;
     background:#f4f6fb;border:2px solid var(--accent);cursor:pointer}
-  #volPct{min-width:34px;text-align:right;color:var(--text)}
+  .soundRow span{min-width:38px;text-align:right;color:var(--text)}
   #rangeBar{display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;
     margin-top:8px;width:min(96vw,940px);color:var(--dim);font-size:.85em}
   #rangeBar button{background:var(--panel2);border:2px solid #333a5c;border-radius:8px;color:var(--text);
@@ -171,13 +171,15 @@
     </div>
   </div>
   <div id="menu">
-    <h2>🏰 TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">5.17.13.7</span></h2>
+    <h2>🏰 TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">5.18.13.7</span></h2>
     <div id="sceneSel">
       <button data-scene="forest" class="on">🌲 Forest</button>
       <button data-scene="beach">🏖️ Beach</button>
       <button data-scene="mountains">⛰️ Mountains</button>
     </div>
-    <div id="soundRow">🔊 <input id="volSlider" type="range" min="0" max="100" value="70"><span id="volPct">70%</span></div>
+    <div class="soundRow" title="Sound effects volume">🔊 <input id="volSlider" type="range" min="0" max="100" value="70"><span id="volPct">70%</span></div>
+    <div class="soundRow" title="Menu music volume">🎵 <input id="musSlider" type="range" min="0" max="100" value="50"><span id="musPct">50%</span></div>
+    <div class="soundRow" title="Screen shake strength">💥 <input id="shakeSlider" type="range" min="0" max="200" value="100"><span id="shakePct">100%</span></div>
     <button onclick="menuBot()">🤖 Play vs Bot (turn-based)</button>
     <button onclick="menuBlitz()">⚡ Blitz vs Bot (real-time!)</button>
     <button onclick="menu3()">🔺 3-Player Free-for-All (vs 2 Bots)</button>
@@ -403,6 +405,62 @@ function setVolume(v){                                  // driven by the menu sl
   sndVol=Math.max(0,Math.min(1,v));
   try{ localStorage.setItem("td_vol",sndVol); }catch(e){}
   if(masterGain) masterGain.gain.value=sndVol;
+}
+
+// ---- retro menu music: a looping chiptune played on the same tiny synth ----
+let musVol=(()=>{ const v=parseFloat(localStorage.getItem("td_mus")); return isNaN(v)?0.5:v; })();  // 0..1
+let musicGain=null, musicOn=false, musicTimer=null, musicNextT=0, musicStep=0, audioUnlocked=false;
+const MUS_STEP=0.21;                                    // one 8th note (~143 BPM)
+// Am | G | F | E — 4 bars of 8th notes; 0 = rest
+const MELODY=[440,0,523,440,659,0,523,440,  392,0,494,392,587,0,494,392,
+              349,0,440,349,523,0,440,523,  659,0,494,392,330,0,0,0];
+const BASSLN=[220,0,165,0,220,0,165,0,  196,0,147,0,196,0,147,0,
+              175,0,131,0,175,0,131,0,  165,0,247,0,165,0,247,0];
+function setMusicVol(v){
+  musVol=Math.max(0,Math.min(1,v));
+  try{ localStorage.setItem("td_mus",musVol); }catch(e){}
+  if(musicGain) musicGain.gain.value=musVol;
+}
+function musNote(freq,t,dur,type,vol){
+  const a=ac(), o=a.createOscillator(), g=a.createGain();
+  o.type=type; o.frequency.value=freq;
+  g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(.001,t+dur);
+  o.connect(g); g.connect(musicGain); o.start(t); o.stop(t+dur+.02);
+}
+function pumpMusic(){                                    // lookahead scheduler: queue notes ~0.4s ahead
+  if(!musicOn) return;
+  const a=ac();
+  while(musicNextT < a.currentTime+0.4){
+    const i=musicStep%MELODY.length;
+    if(MELODY[i]) musNote(MELODY[i],musicNextT,MUS_STEP*0.95,"square",.045);
+    if(BASSLN[i]) musNote(BASSLN[i],musicNextT,MUS_STEP*1.9,"triangle",.08);
+    musicStep++; musicNextT+=MUS_STEP;
+  }
+}
+function startMusic(){
+  if(musicOn || !audioUnlocked) return;
+  try{
+    const a=ac();
+    if(!musicGain){ musicGain=a.createGain(); musicGain.gain.value=musVol; musicGain.connect(a.destination); }
+    musicOn=true; musicStep=0; musicNextT=a.currentTime+.05;
+    musicTimer=setInterval(pumpMusic,120); pumpMusic();
+  }catch(e){}
+}
+function stopMusic(){
+  musicOn=false;
+  if(musicTimer){ clearInterval(musicTimer); musicTimer=null; }
+}
+// browsers block audio until a user gesture: unlock on the first tap/click
+window.addEventListener("pointerdown",()=>{
+  audioUnlocked=true;
+  try{ const a=ac(); if(a.state==="suspended") a.resume(); }catch(e){}
+},{capture:true});
+
+// ---- screen shake strength (0..2, slider-controlled, purely visual) ----
+let shakeMul=(()=>{ const v=parseFloat(localStorage.getItem("td_shake")); return isNaN(v)?1:v; })();
+function setShakeMul(v){
+  shakeMul=Math.max(0,Math.min(2,v));
+  try{ localStorage.setItem("td_shake",shakeMul); }catch(e){}
 }
 function sfx(type){
   if(sndVol<=0) return;
@@ -2598,7 +2656,7 @@ function render(){
   ctx.save();
   // forest floor fills everything (incl. border pad)
   ctx.fillStyle=PAL.forest; ctx.fillRect(0,0,W+2*PAD,H+2*PAD);
-  if(shake>0){ ctx.translate(rnd(-shake,shake),rnd(-shake,shake)); }
+  if(shake>0 && shakeMul>0){ const s=shake*shakeMul; ctx.translate(rnd(-s,s),rnd(-s,s)); }
   ctx.translate(PAD,PAD);
   drawGround();
   drawScorches();
@@ -2705,6 +2763,8 @@ function loop(now){
   const dt=Math.min(.05,(now-last)/1000); last=now;
   animT+=dt;
   shake=Math.max(0,shake-dt*22);
+  if(menuOpen && !musicOn) startMusic();               // chiptune plays on the main menu only
+  else if(!menuOpen && musicOn) stopMusic();
   if(phase==="battle"){
     acc+=dt;
     while(acc>=SIM_STEP && phase==="battle"){ updateBattle(SIM_STEP); acc-=SIM_STEP; }
@@ -2749,6 +2809,9 @@ function setMsgText(t){ document.getElementById("msg").textContent=t; }
 
 // ============================== PATCH NOTES ==============================
     const PATCH_NOTES = [
+  ["5.18.13.7",["🎵 NEW: Retro menu music! A looping chiptune (played on the same tiny synth as the sound effects) now sets the mood on the main menu.",
+          "🎚️ Three settings sliders: 🔊 sound effects, 🎵 menu music, and 💥 screen shake (0–200%) — all remembered between sessions.",
+          "Tip: drag the 💥 slider and release for a shake preview."]],
   ["5.17.13.7",["🖥️ Removed the big page banner above the battlefield — it was cutting off part of the menu on some screen sizes. More room for the action!",
           "📜 The menu itself now scrolls when it's taller than the screen instead of clipping, and the scene picker fits on narrow phones."]],
   ["5.17.13.6",["🥾 2v2 fix: troops now march straight forward across the field instead of all converging on the top tower — they only home in on the nearest enemy tower once they've crossed to its side."]],
@@ -3263,20 +3326,31 @@ document.querySelectorAll("#rangeBar button").forEach(b=>{
   b.onclick=()=>{ showRanges = showRanges===b.dataset.r ? null : b.dataset.r; updateRangeBar(); };
 });
 
-// sound slider: master volume, remembered across sessions
+// settings sliders (SFX / music / screen shake), remembered across sessions
 {
-  const slider=document.getElementById("volSlider"), pct=document.getElementById("volPct");
   const THUMB=14;
   // fill the track up to the THUMB CENTRE (which travels thumb/2 .. width-thumb/2), so the
   // yellow fill's leading edge always lines up with the thumb instead of racing ahead of it
-  function paintSlider(){
-    const tw=slider.clientWidth||150, frac=(slider.value-slider.min)/(slider.max-slider.min);
-    const pos=(THUMB/2 + frac*(tw-THUMB))/tw*100;
-    slider.style.background=`linear-gradient(to right, var(--accent) 0%, var(--accent) ${pos}%, #333a5c ${pos}%, #333a5c 100%)`;
+  function wireSlider(id,pctId,initial,onInput,onRelease){
+    const slider=document.getElementById(id), pct=document.getElementById(pctId);
+    function paint(){
+      const tw=slider.clientWidth||150, frac=(slider.value-slider.min)/(slider.max-slider.min);
+      const pos=(THUMB/2 + frac*(tw-THUMB))/tw*100;
+      slider.style.background=`linear-gradient(to right, var(--accent) 0%, var(--accent) ${pos}%, #333a5c ${pos}%, #333a5c 100%)`;
+    }
+    slider.value=initial; pct.textContent=slider.value+"%"; paint();
+    slider.oninput=()=>{ onInput(+slider.value); pct.textContent=slider.value+"%"; paint(); };
+    if(onRelease) slider.onchange=()=>onRelease(+slider.value);
   }
-  slider.value=Math.round(sndVol*100); pct.textContent=slider.value+"%"; paintSlider();
-  slider.oninput=()=>{ setVolume(slider.value/100); pct.textContent=slider.value+"%"; paintSlider(); };
-  slider.onchange=()=>{ ac(); sfx("place"); };          // audible preview on release
+  wireSlider("volSlider","volPct",Math.round(sndVol*100),
+    v=>setVolume(v/100),
+    ()=>{ audioUnlocked=true; ac(); sfx("place"); });                 // audible preview on release
+  wireSlider("musSlider","musPct",Math.round(musVol*100),
+    v=>setMusicVol(v/100),
+    ()=>{ audioUnlocked=true; if(menuOpen && !musicOn) startMusic(); });
+  wireSlider("shakeSlider","shakePct",Math.round(shakeMul*100),
+    v=>setShakeMul(v/100),
+    ()=>{ shake=Math.min(shake+5,8); });                              // visible preview on release
 }
 
 // boot: pretty battlefield behind the menu

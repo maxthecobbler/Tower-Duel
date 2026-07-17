@@ -23,12 +23,14 @@
     backdrop-filter:blur(2px)}
   #hud .gold{color:var(--accent);font-weight:bold;font-size:1.1em}
   #hud .dim{color:var(--dim);font-size:.9em}
+  #playArea{display:flex;flex-direction:column;align-items:center;width:100%}
   #toolbar{display:flex;flex-direction:column;gap:6px;align-items:stretch;
     margin-top:10px;width:min(96vw,940px);
     background:var(--panel);padding:8px;border-radius:12px;border:1px solid #2c3050;
     transition:opacity .3s}
   #toolbar.away{opacity:.45;pointer-events:none}
-  /* card categories: label on the left, cards flowing to the right */
+  #cardSections{display:flex;flex-direction:column;gap:6px;width:100%}
+  /* card categories: label on the left, cards flowing to the right (default / narrow) */
   .cardSection{display:flex;align-items:center;gap:8px}
   .cardSection:not(:last-child){padding-bottom:6px;border-bottom:1px solid #2c3050}
   .secLabel{flex:0 0 60px;text-align:right;font-size:.6em;letter-spacing:1px;color:var(--dim);
@@ -145,6 +147,18 @@
     touch-action:none;user-select:none;-webkit-user-select:none}
   #joyKnob{position:absolute;left:50%;top:50%;width:44px;height:44px;margin:-22px 0 0 -22px;
     border-radius:50%;background:var(--panel2);border:2px solid var(--accent);pointer-events:none}
+  /* ---------- wide screens: card panel moves to the LEFT of the battlefield, categories as columns ---------- */
+  @media (min-width:1300px){
+    #playArea{flex-direction:row-reverse;align-items:flex-start;justify-content:center;gap:14px;width:auto}
+    #wrap{width:min(940px, calc(94vw - 360px))}
+    #toolbar{width:auto;margin-top:0}
+    #cardSections{flex-direction:row;align-items:flex-start;gap:0}
+    .cardSection{flex-direction:column;align-items:center;gap:5px;padding:0 8px}
+    .cardSection:not(:last-child){padding-bottom:0;border-bottom:none;border-right:1px solid #2c3050}
+    .cardGrid{flex-direction:column;flex:none;align-items:stretch;justify-content:flex-start}
+    .secLabel{flex:none;width:100%;text-align:center}
+    #fight{width:100%;margin-top:8px}
+  }
   /* ---------- phones / narrow screens ---------- */
   @media (max-width:640px){
     body{padding:4px}
@@ -173,6 +187,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js" crossorigin="anonymous"></script>
 </head>
 <body>
+<div id="playArea">
 <div id="wrap">
   <canvas id="cv" width="448" height="240"></canvas>
   <div id="hud">
@@ -195,7 +210,7 @@
     </div>
   </div>
   <div id="menu">
-    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">5.23.21.12</span></h2>
+    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">5.24.21.12</span></h2>
     <div id="sceneSel">
       <button data-scene="forest" class="on">Forest</button>
       <button data-scene="beach">Beach</button>
@@ -232,6 +247,7 @@
   </div>
 </div>
 <div id="toolbar"></div>
+</div>
 <div id="joy"><div id="joyKnob"></div></div>
 <div id="rangeBar">
   <span>👁 Show ranges:</span>
@@ -3009,6 +3025,7 @@ function setMsgText(t){ document.getElementById("msg").textContent=t; }
 
 // ============================== PATCH NOTES ==============================
     const PATCH_NOTES = [
+  ["5.24.21.12",["🖥️ On wide screens, the card panel now sits to the LEFT of the battlefield with each category as a vertical column, making better use of the space. Narrower windows keep the card bar below the battlefield as before."]],
   ["5.23.21.12",["⚖️ New unit caps: max 3 Catapults and max 1 Tank alive per side at a time. Their cards grey out once you hit the limit (and re-enable if one is destroyed or sold)."]],
   ["5.23.20.12",["🗂️ The card bar is now organized into labelled sections — Buildings, Troops, Spells, and Actions — so it's easier to find what you want at a glance."]],
   ["5.22.20.12",["💰 In Sell / Sell Troop mode, hovering a unit no longer pops up its health bar — so it doesn't cover the refund amount you'd get."]],
@@ -3355,13 +3372,14 @@ function makeCardButton(key){
   }
   return b;
 }
-// organized card categories, each its own labelled row
+// organized card categories, each its own labelled section (rows when stacked, columns when beside the map)
+const cardSections=document.createElement("div"); cardSections.id="cardSections"; toolbar.appendChild(cardSections);
 function addToolSection(label, contents){
   const sec=document.createElement("div"); sec.className="cardSection";
   const h=document.createElement("div"); h.className="secLabel"; h.textContent=label; sec.appendChild(h);
   const grid=document.createElement("div"); grid.className="cardGrid";
   for(const el of contents) grid.appendChild(el);
-  sec.appendChild(grid); toolbar.appendChild(sec);
+  sec.appendChild(grid); cardSections.appendChild(sec);
   return grid;
 }
 const CARD_CATS=[

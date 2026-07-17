@@ -195,7 +195,7 @@
     </div>
   </div>
   <div id="menu">
-    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">5.23.20.12</span></h2>
+    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">5.23.21.12</span></h2>
     <div id="sceneSel">
       <button data-scene="forest" class="on">Forest</button>
       <button data-scene="beach">Beach</button>
@@ -373,13 +373,13 @@ const TIPS={
   harvester:"20 HP — Earns +3 gold every turn. Its killer loots 25% of its lifetime earnings — but it EXPLODES on death: 12 dmg to all enemies within 2 tiles!",
   turret:"30 HP — Cannonball: 5 splash dmg every 1.4s, range 90.",
   spikes:"Single-use trap. When an enemy troop steps within ~1 tile, hidden spikes erupt for 15 dmg to every foe in the blast, then the trap is spent. Doesn't block movement.",
-  catapult:"40 HP — Siege engine that targets only enemy BUILDINGS (ignores walls), anywhere on the map. Lobs a boulder: 15 dmg to buildings, 5 to troops in the blast. Slow: fires every 10s (down to every 3s fully upgraded). Upgrades cost more than it does to build.",
+  catapult:"40 HP — Siege engine that targets only enemy BUILDINGS (ignores walls), anywhere on the map. Lobs a boulder: 15 dmg to buildings, 5 to troops in the blast. Slow: fires every 10s (down to every 3s fully upgraded). Upgrades cost more than it does to build. Max 3 at once.",
   duck:"16 HP — Blue water only! Squirts water at enemy troops (range 70): slows them 50% for 1.6s and deals 0.1 dmg. Ferocious.",
   magicwell:"20 HP — Place on a PURPLE magic pond. Harvests +3 🔮 magic every turn (spells cost magic). Its killer loots 25% of its lifetime earnings!",
   soldier:"10 HP — 3 dmg / 0.7s melee. Speed 32, detection 60.",
   archer:"9 HP — 2 dmg / 0.9s at range 66. Speed 26, detection 95 (spots enemies early).",
   brute:"38 HP — 8 dmg / 1.2s melee. Slow (16) with tiny detection 38: marches straight for the tower.",
-  tank:"80 HP — YOU control it! Drive with WASD/arrows (or the on-screen joystick on touch), aim with the mouse, and with no card selected, CLICK/tap to fire. Shell blast: 20 dmg to troops AND buildings, range 110. Brute-slow (speed never upgrades). Reload 7s → 2s & 30 dmg fully upgraded — upgrades cost more than the tank. Online it drives itself.",
+  tank:"80 HP — YOU control it! Drive with WASD/arrows (or the on-screen joystick on touch), aim with the mouse, and with no card selected, CLICK/tap to fire. Shell blast: 20 dmg to troops AND buildings, range 110. Brute-slow (speed never upgrades). Reload 7s → 2s & 30 dmg fully upgraded — upgrades cost more than the tank. Online it drives itself. Max 1 at once.",
   fireball:"Launches from your tower, lands where placed. 2-tile blast: 14 dmg to troops, 7 to buildings, 5 to towers. Sets trees on fire!",
   heal:"Instant zone (1 tile): heals YOUR troops, harvesters & walls +2 HP/s for 6s. Not towers/turrets.",
   shield:"Instant (2-tile radius): everything of yours inside gains a shield that absorbs the next 10 damage.",
@@ -413,6 +413,10 @@ let spellsQueued=[], myMarkers=[], fireballs=[], scorches=[];
 let fires=[], healZones=[], moneybags=[], upgradeQueued=false, pendingTech={};
 const TROOP_LIMIT=3;                       // max troops ALIVE per side (total, not per turn)
 function troopCount(side){ return ents.filter(e=>e.side===side && e.troop && !e.dead).length; }
+// per-KIND caps (max alive of that specific card per side)
+const KIND_LIMIT={ catapult:3, tank:1 };
+function kindCount(side,kind){ return ents.filter(e=>e.side===side && e.kind===kind && !e.dead).length; }
+function atKindLimit(side,kind){ return KIND_LIMIT[kind] && kindCount(side,kind)>=KIND_LIMIT[kind]; }
 const SELL_RATE=0.5;                       // sell refunds 50% of the card's gold cost
 let turn, phase, battleT, selected=null, hover=null, shake=0, animT=0, over=false;
 let golds={p:0,b:0};                       // both sides' gold (opponent's is fully computable)
@@ -643,6 +647,7 @@ function canPlace(gx,gy){
   if(selected==="sell"||selected==="sellTroop") return false;
   if(selected && KINDS[selected] && KINDS[selected].spell) return canPlaceSpell(gx,gy);
   if(selected && KINDS[selected] && KINDS[selected].troop && troopCount(mySide)>=TROOP_LIMIT) return false;
+  if(selected && atKindLimit(mySide,selected)) return false;
   return canBuild() && validSpot(mySide,gx,gy,selected);
 }
 function sellableAt(side,gx,gy){          // BUILDINGS only (the Sell button)
@@ -746,6 +751,7 @@ function place(kind,gx,gy){
     return;
   }
   if(k.troop && troopCount(mySide)>=TROOP_LIMIT){ setMsgText(`Troop limit: max ${TROOP_LIMIT} troops alive at once.`); return; }
+  if(atKindLimit(mySide,kind)){ setMsgText(`Limit: max ${KIND_LIMIT[kind]} ${KINDS[kind].label}${KIND_LIMIT[kind]>1?"s":""} at once.`); return; }
   if(golds[mySide]<k.cost || !validSpot(mySide,gx,gy,kind)) return;
   golds[mySide]-=k.cost;
   spawn(mySide,kind,gx,gy, mode==="online");
@@ -788,6 +794,7 @@ function botBuild(side="b", P=BOT_PARAMS){
     const k=KINDS[kind];
     if(golds[side]<k.cost) return false;
     if(k.troop && troopCount(side)>=TROOP_LIMIT) return false;
+    if(atKindLimit(side,kind)) return false;
     if(!validSpot(side,gx,gy,kind)) return false;
     golds[side]-=k.cost;
     spawn(side,kind,gx,gy);
@@ -932,7 +939,7 @@ function botBuild3(side){
   const mine=k=>ents.filter(e=>e.side===side&&e.kind===k&&!e.dead);
   const gold=()=>golds[side];
   const tryPlace=(kind)=>{
-    const k=KINDS[kind]; if(gold()<k.cost) return false;
+    const k=KINDS[kind]; if(gold()<k.cost || atKindLimit(side,kind)) return false;
     for(let i=0;i<40;i++){                            // random cell in a ring around the bot's tower
       const ang=rnd(0,Math.PI*2), rad=rnd(CELL*1.5,CELL*8);
       const gx=Math.round((tw.x+Math.cos(ang)*rad)/CELL-0.5), gy=Math.round((tw.y+Math.sin(ang)*rad)/CELL-0.5);
@@ -1611,7 +1618,7 @@ function resolveOrders(data){
           spellsQueued.push({side, x:cellCx(o.gx), y:cellCx(o.gy), kind:o.kind});
         }
       }
-      else if(validSpot(side,o.gx,o.gy,o.kind)){
+      else if(!atKindLimit(side,o.kind) && validSpot(side,o.gx,o.gy,o.kind)){
         golds[side]-=KINDS[o.kind].cost;
         spawn(side,o.kind,o.gx,o.gy);
         puff(cellCx(o.gx),cellCx(o.gy), teamCol(side), 8);
@@ -3002,6 +3009,7 @@ function setMsgText(t){ document.getElementById("msg").textContent=t; }
 
 // ============================== PATCH NOTES ==============================
     const PATCH_NOTES = [
+  ["5.23.21.12",["⚖️ New unit caps: max 3 Catapults and max 1 Tank alive per side at a time. Their cards grey out once you hit the limit (and re-enable if one is destroyed or sold)."]],
   ["5.23.20.12",["🗂️ The card bar is now organized into labelled sections — Buildings, Troops, Spells, and Actions — so it's easier to find what you want at a glance."]],
   ["5.22.20.12",["💰 In Sell / Sell Troop mode, hovering a unit no longer pops up its health bar — so it doesn't cover the refund amount you'd get."]],
   ["5.22.20.11",["❤ HP bars are now colour-coded: green at full health, yellow when hurt, red when low.",
@@ -3461,8 +3469,9 @@ function refreshUI(){
     const b=document.getElementById("tool_"+key);
     const wallet=KINDS[key].spell?magics[mySide]:golds[mySide];
     const troopCap=!!KINDS[key].troop && troopCount(mySide)>=TROOP_LIMIT;
+    const kindCap=!!atKindLimit(mySide,key);
     // NB: force arg must be a real boolean — classList.toggle(cls, undefined) FLIPS the class!
-    b.classList.toggle("disabled", !!(!building || wallet<KINDS[key].cost || troopCap));
+    b.classList.toggle("disabled", !!(!building || wallet<KINDS[key].cost || troopCap || kindCap));
     b.classList.toggle("selected",selected===key);
     if(TECH[key]){
       const eff=techLvl(mySide,key)+(pendingTech[key]||0);

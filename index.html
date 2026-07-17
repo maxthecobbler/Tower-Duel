@@ -133,6 +133,12 @@
     padding:7px 12px;font-size:.8em;max-width:340px;text-align:center;color:var(--text);
     pointer-events:none;display:none}
   #tip b{color:var(--accent)}
+  /* virtual joystick: drives the tank on touch screens */
+  #joy{position:fixed;left:14px;bottom:14px;width:110px;height:110px;border-radius:50%;
+    background:rgba(20,24,40,.55);border:2px solid #333a5c;z-index:8;display:none;
+    touch-action:none;user-select:none;-webkit-user-select:none}
+  #joyKnob{position:absolute;left:50%;top:50%;width:44px;height:44px;margin:-22px 0 0 -22px;
+    border-radius:50%;background:var(--panel2);border:2px solid var(--accent);pointer-events:none}
   /* ---------- phones / narrow screens ---------- */
   @media (max-width:640px){
     body{padding:4px}
@@ -181,7 +187,7 @@
     </div>
   </div>
   <div id="menu">
-    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">5.20.15.7</span></h2>
+    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">5.20.16.7</span></h2>
     <div id="sceneSel">
       <button data-scene="forest" class="on">Forest</button>
       <button data-scene="beach">Beach</button>
@@ -218,6 +224,7 @@
   </div>
 </div>
 <div id="toolbar"></div>
+<div id="joy"><div id="joyKnob"></div></div>
 <div id="rangeBar">
   <span>👁 Show ranges:</span>
   <button data-r="p">🔵 Blue</button>
@@ -357,7 +364,7 @@ const TIPS={
   soldier:"10 HP — 3 dmg / 0.7s melee. Speed 32, detection 60.",
   archer:"9 HP — 2 dmg / 0.9s at range 66. Speed 26, detection 95 (spots enemies early).",
   brute:"38 HP — 8 dmg / 1.2s melee. Slow (16) with tiny detection 38: marches straight for the tower.",
-  tank:"80 HP — YOU control it! Drive with WASD/arrow keys, aim with the mouse, and with no card selected, CLICK to fire. Shell blast: 20 dmg to troops AND buildings, range 110. Brute-slow (speed never upgrades). Reload 7s → 2s & 30 dmg fully upgraded — upgrades cost more than the tank. Online (and on touch screens) it drives itself.",
+  tank:"80 HP — YOU control it! Drive with WASD/arrows (or the on-screen joystick on touch), aim with the mouse, and with no card selected, CLICK/tap to fire. Shell blast: 20 dmg to troops AND buildings, range 110. Brute-slow (speed never upgrades). Reload 7s → 2s & 30 dmg fully upgraded — upgrades cost more than the tank. Online it drives itself.",
   fireball:"Launches from your tower, lands where placed. 2-tile blast: 14 dmg to troops, 7 to buildings, 5 to towers. Sets trees on fire!",
   heal:"Instant zone (1 tile): heals YOUR troops, harvesters & walls +2 HP/s for 6s. Not towers/turrets.",
   shield:"Instant (2-tile radius): everything of yours inside gains a shield that absorbs the next 10 damage.",
@@ -1297,13 +1304,15 @@ function updateBattle(dt){
       e.slowT=Math.max(0,(e.slowT||0)-dt);
       const spd=tstat(e.side,e.kind,"spd")*(e.slowT>0?0.5:1);  // soaked troops move at half speed
       const range=tstat(e.side,e.kind,"range");
-      if(e.kind==="tank" && tankManual(e) && !IS_TOUCH){
-        // YOUR tank: fully player-driven — arrows/WASD move it, the mouse aims, clicks fire.
-        // (Touch devices have no keys, so there the tank keeps the normal auto-march below.)
-        const ddx=(driveKeys.right?1:0)-(driveKeys.left?1:0), ddy=(driveKeys.down?1:0)-(driveKeys.up?1:0);
-        if(ddx||ddy){
-          const m=hyp(ddx,ddy);
-          e.x+=ddx/m*spd*dt; e.y+=ddy/m*spd*dt;
+      if(e.kind==="tank" && tankManual(e)){
+        // YOUR tank: fully player-driven — arrows/WASD (or the touch joystick) move it,
+        // the mouse aims, clicks/taps fire. The joystick is analog: part-deflection = slower.
+        const ddx=(driveKeys.right?1:0)-(driveKeys.left?1:0)+joyVec.x;
+        const ddy=(driveKeys.down?1:0)-(driveKeys.up?1:0)+joyVec.y;
+        const mag=hyp(ddx,ddy);
+        if(mag>0.18){
+          const sc=Math.min(1,mag);
+          e.x+=ddx/mag*spd*sc*dt; e.y+=ddy/mag*spd*sc*dt;
           e.step+=dt*10;
           collideObstacles(e); collideBuildings(e);
           e.x=Math.max(4,Math.min(W-4,e.x)); e.y=Math.max(4,Math.min(H-4,e.y));
@@ -2857,6 +2866,7 @@ function loop(now){
   shake=Math.max(0,shake-dt*22);
   if(menuOpen && !musicOn) startMusic();               // chiptune plays on the main menu only
   else if(!menuOpen && musicOn) stopMusic();
+  updateJoy();                                          // touch joystick shows only while a tank is drivable
   if(phase==="battle"){
     acc+=dt;
     while(acc>=SIM_STEP && phase==="battle"){ updateBattle(SIM_STEP); acc-=SIM_STEP; }
@@ -2901,6 +2911,8 @@ function setMsgText(t){ document.getElementById("msg").textContent=t; }
 
 // ============================== PATCH NOTES ==============================
     const PATCH_NOTES = [
+  ["5.20.16.7",["📱 Touch players now get a virtual JOYSTICK (bottom-left) to drive the Tank — it appears automatically during battle when you have one. It's analog: small deflections creep, full tilt is top speed.",
+          "Tap the battlefield to fire, exactly as before. Mobile tanks no longer drive themselves."]],
   ["5.20.15.7",["📱 Menu overhaul for mobile: it now fills the whole screen (no more cut-off bottom) with two clean columns — VS BOTS and ONLINE.",
           "Mode names simplified: 1v1, 1v1 Blitz, 1v1v1, 2v2. Sliders relabeled SFX / Music / Shake."]],
   ["5.19.15.7",["🪖 The Tank is now FULLY yours: drive it with WASD or the arrow keys! It only moves when you steer (it can still run over money bags).",
@@ -3406,6 +3418,32 @@ window.addEventListener("keydown",ev=>{
 });
 window.addEventListener("keyup",ev=>{ const d=DRIVE_MAP[ev.key]; if(d) driveKeys[d]=false; });
 window.addEventListener("blur",()=>{ for(const k in driveKeys) driveKeys[k]=false; });
+
+// ---- virtual joystick (touch screens): analog drive vector for the tank ----
+let joyVec={x:0,y:0};
+{
+  const joy=document.getElementById("joy"), knob=document.getElementById("joyKnob");
+  let joyId=null;
+  function joyMove(ev){
+    const r=joy.getBoundingClientRect(), half=r.width/2;
+    let dx=(ev.clientX-(r.left+half))/half, dy=(ev.clientY-(r.top+half))/half;
+    const m=hyp(dx,dy); if(m>1){ dx/=m; dy/=m; }
+    joyVec={x:dx,y:dy};
+    knob.style.transform=`translate(${dx*30}px,${dy*30}px)`;
+  }
+  function joyReset(){ joyId=null; joyVec={x:0,y:0}; knob.style.transform=""; }
+  joy.addEventListener("pointerdown",ev=>{ ev.preventDefault(); joyId=ev.pointerId;
+    try{ joy.setPointerCapture(joyId); }catch(e){} joyMove(ev); });
+  joy.addEventListener("pointermove",ev=>{ if(ev.pointerId===joyId) joyMove(ev); });
+  joy.addEventListener("pointerup",ev=>{ if(ev.pointerId===joyId) joyReset(); });
+  joy.addEventListener("pointercancel",joyReset);
+}
+// show the joystick only when a tank of yours is drivable and the device is touch
+function updateJoy(){
+  document.getElementById("joy").style.display =
+    (IS_TOUCH && phase==="battle" && !menuOpen && !over && mode!=="online" &&
+     ents.some(e=>!e.dead && e.kind==="tank" && tankManual(e))) ? "block" : "none";
+}
 
 // ---- touch: press & drag to aim the ghost, lift to place (mirrors mouse) ----
 function touchPos(t){

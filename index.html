@@ -215,7 +215,7 @@
     </div>
   </div>
   <div id="menu">
-    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">5.25.21.12</span></h2>
+    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">5.26.21.12</span></h2>
     <div id="sceneSel">
       <button data-scene="forest" class="on">Forest</button>
       <button data-scene="beach">Beach</button>
@@ -326,6 +326,7 @@ const KINDS = {
   spikes:   {label:"Spikes",   icon:"🪤", cost:7,  hp:1,   building:true, trap:true, dmg:15, rad:14},
   catapult: {label:"Catapult", icon:"🪨", cost:50, hp:40,  building:true, gw:2, range:800, cd:10, aoe:16, dmgBuilding:15, dmgTroop:5},
   duck:     {label:"Duck",     icon:"🦆", cost:6,  hp:16,  building:true, water:true, range:70, cd:1.0, slow:1.6, dmg:0.1},
+  gunnest:  {label:"Gun Nest", icon:"🔫", cost:12, hp:1,   building:true, needsWall:true, dmg:1, shotCd:0.1},
   magicwell:{label:"Mana Well",icon:"🔮", cost:5,  hp:20,  building:true, magicWater:true},
   soldier:  {label:"Soldier",  icon:"⚔️", cost:4,  hp:10,  troop:true, spd:32, range:11, dmg:3, cd:0.7, aggro:60},
   archer:   {label:"Archer",   icon:"🏹", cost:6,  hp:9,   troop:true, spd:26, range:66, dmg:2, cd:0.9, aggro:95},
@@ -344,6 +345,7 @@ const TECH={
   spikes:   [null,{cost:0,dmg:15,rad:14},      {cost:8, dmg:20,rad:15},      {cost:14,dmg:26,rad:18},      {cost:22,dmg:33,rad:22}],
   catapult: [null,{cost:0,cd:10,dmgBuilding:15,dmgTroop:5},{cost:55,cd:7,dmgBuilding:18,dmgTroop:5},{cost:70,cd:5,dmgBuilding:22,dmgTroop:6},{cost:90,cd:3,dmgBuilding:27,dmgTroop:7}],
   duck:     [null,{cost:0,cd:1.0,slow:1.6},    {cost:6, cd:0.8,slow:2.0},    {cost:10,cd:0.65,slow:2.4},   {cost:16,cd:0.5,slow:3.0}],
+  gunnest:  [null,{cost:0,reload:10,mag:20},   {cost:10,reload:7,mag:24},    {cost:18,reload:5,mag:29},    {cost:28,reload:3,mag:35}],   // faster reloads + bigger magazines; RANGE comes from the soldier's level
   soldier:  [null,{cost:0,hp:10,dmg:3,cd:0.7}, {cost:8, hp:13,dmg:4,cd:0.62},{cost:14,hp:16,dmg:5,cd:0.55},{cost:22,hp:20,dmg:6,cd:0.48}],
   archer:   [null,{cost:0,hp:9,dmg:2,cd:0.9,range:66},{cost:8,hp:11,dmg:3,cd:0.8,range:74},{cost:14,hp:13,dmg:4,cd:0.7,range:82},{cost:22,hp:16,dmg:5,cd:0.6,range:92}],
   brute:    [null,{cost:0,spd:16,cd:1.2},      {cost:8, spd:20,cd:1.05},     {cost:14,spd:24,cd:0.9},      {cost:22,spd:29,cd:0.75}],
@@ -396,6 +398,7 @@ const TIPS={
   spikes:"Single-use trap. When an enemy troop steps within ~1 tile, hidden spikes erupt for 15 dmg to every foe in the blast, then the trap is spent. Doesn't block movement.",
   catapult:"40 HP — Siege engine that targets only enemy BUILDINGS (ignores walls), anywhere on the map. Lobs a boulder: 15 dmg to buildings, 5 to troops in the blast. Slow: fires every 10s (down to every 3s fully upgraded). Upgrades cost more than it does to build. Max 5 at once.",
   duck:"16 HP — Blue water only! Squirts water at enemy troops (range 70): slows them 50% for 1.6s and deals 0.1 dmg. Ferocious.",
+  gunnest:"Build ON one of your walls. Needs a gunner: place a Soldier onto it to man it (doesn't count toward the troop limit). Burst of 20 shots (1 dmg every 0.1s), then reloads 10s → 3s & 35-shot mags fully upgraded. RANGE grows with your Soldier level. Enemy archers can pick off the gunner (replace him anytime); if the wall breaks, the nest falls and the gunner bails out at half HP.",
   magicwell:"20 HP — Place on a PURPLE magic pond. Harvests +3 🔮 magic every turn (spells cost magic). Its killer loots 25% of its lifetime earnings!",
   soldier:"10 HP — 3 dmg / 0.7s melee. Speed 32, detection 60.",
   archer:"9 HP — 2 dmg / 0.9s at range 66. Speed 26, detection 95 (spots enemies early).",
@@ -651,7 +654,30 @@ function inTerritory(side,gx,gy){
   return side==="p" ? gx>=0&&gx<=P_MAXCOL : gx>=B_MINCOL&&gx<COLS;
 }
 function bagAt(gx,gy){ return moneybags.some(b=>b.gx===gx && b.gy===gy); }
+// ---- gun nest helpers: a wall-mounted MG that needs a wall under it and a soldier in it ----
+function ownWallAt(side,gx,gy){ return ents.some(o=>!o.dead && !o.selling && o.kind==="wall" && o.side===side && o.gx===gx && o.gy===gy); }
+function nestOnCell(gx,gy){ return ents.find(o=>!o.dead && !o.selling && o.kind==="gunnest" && o.gx===gx && o.gy===gy); }
+// your unmanned nest at this cell (a Soldier placed here garrisons it instead of spawning)
+function nestGarrisonTarget(side,gx,gy){
+  const n=nestOnCell(gx,gy);
+  return (n && n.side===side && !(n.gHp>0)) ? n : null;
+}
+function gunRange(side){ return 60 + techLvl(side,"soldier")*10; }   // soldier L1..L4 → range 70..100
+function garrisonNest(nest){
+  nest.gHp=tstat(nest.side,"soldier","hp"); nest.gMax=nest.gHp;
+  nest.hp=nest.gHp; nest.maxHp=nest.gMax;                            // mirrored so HP bars/hover just work
+  nest.mag=tstat(nest.side,"gunnest","mag"); nest.reload=0; nest.shotT=0;
+}
+function ejectGunner(nest, frac){       // the gunner bails out as a regular soldier (frac of his current HP)
+  if(!(nest.gHp>0)) return;
+  const s=makeTroop(nest.side,"soldier",nest.x,nest.y+6);
+  s.hp=Math.max(1,Math.ceil(nest.gHp*frac));
+  ents.push(s);
+  nest.gHp=0;
+}
 function validSpot(side,gx,gy,kind){
+  if(kind==="gunnest")                                  // nests mount ON one of your walls (one per wall)
+    return gx>=0&&gx<COLS&&gy>=0&&gy<ROWS && inTerritory(side,gx,gy) && ownWallAt(side,gx,gy) && !nestOnCell(gx,gy);
   const gw=(KINDS[kind]&&KINDS[kind].gw)||1, gh=(KINDS[kind]&&KINDS[kind].gh)||1;
   for(let dx=0;dx<gw;dx++)for(let dy=0;dy<gh;dy++){    // every cell of the footprint must be free & legal
     const cx=gx+dx, cy=gy+dy;
@@ -667,13 +693,15 @@ function validSpot(side,gx,gy,kind){
 function canPlace(gx,gy){
   if(selected==="sell"||selected==="sellTroop") return false;
   if(selected && KINDS[selected] && KINDS[selected].spell) return canPlaceSpell(gx,gy);
+  if(selected==="soldier" && nestGarrisonTarget(mySide,gx,gy)) return canBuild();   // garrisoning skips the troop limit
   if(selected && KINDS[selected] && KINDS[selected].troop && troopCount(mySide)>=TROOP_LIMIT) return false;
   if(selected && atKindLimit(mySide,selected)) return false;
   return canBuild() && validSpot(mySide,gx,gy,selected);
 }
 function sellableAt(side,gx,gy){          // BUILDINGS only (the Sell button)
-  return ents.find(o=>!o.dead && !o.selling && o.side===side && o.building && o.kind!=="tower" &&
-    o.gx!==undefined && gx>=o.gx && gx<o.gx+(o.gw||1) && gy>=o.gy && gy<o.gy+(o.gh||1));
+  const hit=o=>!o.dead && !o.selling && o.side===side && o.building && o.kind!=="tower" &&
+    o.gx!==undefined && gx>=o.gx && gx<o.gx+(o.gw||1) && gy>=o.gy && gy<o.gy+(o.gh||1);
+  return ents.find(o=>hit(o)&&o.kind==="gunnest") || ents.find(hit);   // nest sells before the wall beneath it
 }
 function sellableTroopAt(side,x,y){       // TROOPS only (the Sell Troop button) — point-based hit test
   let best=null, bd=1e9;
@@ -707,6 +735,7 @@ function sellEntity(e){                   // shared refund logic for buildings A
       e.selling=true;                               // kept (hidden) until the canonical sell resolves
       myOrders.push({kind:"sell",gx:c.gx,gy:c.gy,troop:e.troop?1:0});
     } else {
+      if(e.kind==="gunnest") ejectGunner(e,1);      // selling a manned nest sets its gunner free (full HP)
       e.dead=true; ents=ents.filter(o=>!o.dead);
     }
   }
@@ -719,9 +748,10 @@ function sellAt(gx,gy){       if(!canBuild()) return; sellEntity(sellableAt(mySi
 function sellTroopAt(x,y){    if(!canBuild()) return; sellEntity(sellableTroopAt(mySide,x,y)); }
 // match a "sell" order (from the network) back to its building or troop
 function findSellTarget(side,o){
-  return o.troop
-    ? ents.find(t=>!t.dead && t.side===side && t.troop && Math.floor(t.x/CELL)===o.gx && Math.floor(t.y/CELL)===o.gy)
-    : ents.find(t=>!t.dead && t.side===side && t.building && t.kind!=="tower" && t.gx===o.gx && t.gy===o.gy);
+  if(o.troop)
+    return ents.find(t=>!t.dead && t.side===side && t.troop && Math.floor(t.x/CELL)===o.gx && Math.floor(t.y/CELL)===o.gy);
+  const hit=t=>!t.dead && t.side===side && t.building && t.kind!=="tower" && t.gx===o.gx && t.gy===o.gy;
+  return ents.find(t=>hit(t)&&t.kind==="gunnest") || ents.find(hit);   // same rule as sellableAt: nest before wall
 }
 function canPlaceSpell(gx,gy){ return canBuild() && gx>=0 && gx<COLS && gy>=0 && gy<ROWS; }
 // GOLD cost of an order list (spells excluded — they cost magic)
@@ -770,6 +800,19 @@ function place(kind,gx,gy){
     sfx("place");
     refreshUI();
     return;
+  }
+  if(kind==="soldier"){                       // a soldier placed on your empty Gun Nest garrisons it
+    const nest=nestGarrisonTarget(mySide,gx,gy);
+    if(nest){
+      if(golds[mySide]<k.cost) return;
+      golds[mySide]-=k.cost;
+      garrisonNest(nest);
+      if(mode==="online"){ nest.gPending=true; myOrders.push({kind,gx,gy}); }
+      puff(nest.x,nest.y-4, teamCol(mySide), 8);
+      sfx("place");
+      refreshUI();
+      return;
+    }
   }
   if(k.troop && troopCount(mySide)>=TROOP_LIMIT){ setMsgText(`Troop limit: max ${TROOP_LIMIT} troops alive at once.`); return; }
   if(atKindLimit(mySide,kind)){ setMsgText(`Limit: max ${KIND_LIMIT[kind]} ${KINDS[kind].label}${KIND_LIMIT[kind]>1?"s":""} at once.`); return; }
@@ -1041,8 +1084,16 @@ function bodyR(o){ return o.kind==="tower"?15 : o.kind==="catapult"?11 : o.build
 // priority inside detection radius: enemy troops > money bags > enemy buildings
 function acquireTarget(e, aggro){
   let bestT=null,bdT=1e9, bestB=null,bdB=1e9, bestBag=null,bdBag=1e9;
+  const isArcher=e.kind==="archer";
   for(const o of ents){
     if(o.dead || !foe(o.side,e.side) || o.kind==="spikes") continue;   // traps are hidden — never targeted
+    if(o.kind==="gunnest"){                        // only ARCHERS can pick off a manned nest's gunner
+      if(!(isArcher && o.gHp>0)) continue;         // melee ignores nests entirely — they break the wall instead
+      const d=dist(e,o) - bodyR(o);
+      if(d>aggro) continue;
+      if(d<bdT){bdT=d;bestT=o;}                    // the exposed gunner is priority, like a troop
+      continue;
+    }
     const d=dist(e,o) - bodyR(o);
     if(d>aggro) continue;
     if(o.troop){ if(d<bdT){bdT=d;bestT=o;} }
@@ -1060,7 +1111,7 @@ function acquireTarget(e, aggro){
 // enemy buildings physically block troops (walls actually wall things off)
 function collideBuildings(e){
   for(const o of ents){
-    if(o.dead || !o.building || !foe(o.side,e.side) || o.kind==="spikes") continue;  // troops walk over traps
+    if(o.dead || !o.building || !foe(o.side,e.side) || o.kind==="spikes" || o.kind==="gunnest") continue;  // traps walked over; nests sit on walls (the wall blocks)
 
     const r=bodyR(o)+3;
     const dx=e.x-o.x, dy=e.y-o.y, d=hyp(dx,dy);
@@ -1076,6 +1127,17 @@ function damage(target,dmg,srcColor){
     target.shield-=ab; dmg-=ab;
     puff(target.x,target.y-4,"#7db4ff",3);
     if(dmg<=0){ floatText(target.x,target.y-8,"blocked","#7db4ff"); return; }
+  }
+  if(target.kind==="gunnest"){                    // shots hit the GUNNER, never the nest itself
+    if(target.gHp>0){
+      target.gHp-=dmg; target.hp=Math.max(0,target.gHp); target.maxHp=target.gMax;
+      floatText(target.x+rnd(-3,3), target.y-8, "-"+dmg, srcColor);
+      if(target.gHp<=0){
+        puff(target.x,target.y-4,teamCol(target.side),8);
+        floatText(target.x,target.y-14,"gunner down!","#ff6b6b");
+      }
+    }
+    return;                                       // the nest only falls with its wall
   }
   target.hp-=dmg;
   floatText(target.x+rnd(-3,3), target.y-8, "-"+dmg, srcColor);
@@ -1096,6 +1158,15 @@ function damage(target,dmg,srcColor){
             size:rnd(1,2),color:magic?"#c9a0ff":PAL.gold});
         sfx("coin");
         refreshUI();
+      }
+    }
+    // a broken wall takes its gun nest down with it — the gunner bails out at HALF health
+    if(target.kind==="wall"){
+      const nest=ents.find(o=>!o.dead && o.kind==="gunnest" && o.gx===target.gx && o.gy===target.gy);
+      if(nest){
+        boom(nest.x,nest.y-3,teamCol(nest.side),10);
+        ejectGunner(nest,0.5);
+        nest.dead=true;
       }
     }
     // harvesters are volatile: they explode on death, hurting everything NOT on their side (2-tile radius)
@@ -1436,6 +1507,25 @@ function updateBattle(dt){
         }
       }
     }
+    else if(e.kind==="gunnest"){
+      if(e.gHp>0){                                   // only fires while a gunner mans it
+        if(e.reload>0){
+          e.reload-=dt;
+          if(e.reload<=0) e.mag=tstat(e.side,"gunnest","mag");   // fresh magazine
+        } else {
+          e.shotT=Math.max(0,(e.shotT||0)-dt);
+          const range=gunRange(e.side), n=nearestEnemy(e,true);  // range scales with the SOLDIER's level
+          if(n && n.d<=range){
+            e.aim=Math.atan2(n.t.y-e.y,n.t.x-e.x);
+            if(e.shotT<=0 && e.mag>0){
+              e.shotT=KINDS.gunnest.shotCd; e.mag--;
+              shoot(e,n.t,{dmg:KINDS.gunnest.dmg,color:teamCol(e.side),spd:240,size:1,lift:4});
+              if(e.mag<=0) e.reload=tstat(e.side,"gunnest","reload");
+            }
+          }
+        }
+      }
+    }
     else if(e.kind==="catapult"){
       const n=nearestEnemyBuilding(e, KINDS.catapult.range);   // sieges enemy buildings anywhere on the map
       if(n){
@@ -1498,8 +1588,13 @@ function updateBattle(dt){
     }
     if(Math.random()<.5) parts.push({x:p.x,y:p.y,vx:0,vy:0,life:.15,t:0,size:1,color:p.color});
     let hit=null;
+    // manned gun nests first: the gunner is EXPOSED above his wall, so projectiles strike him, not the bricks
     for(const e of ents){
-      if(e.dead || !foe(e.side,p.side)) continue;
+      if(e.dead || !foe(e.side,p.side) || e.kind!=="gunnest" || !(e.gHp>0)) continue;
+      if(Math.abs(e.x-p.x)<8 && Math.abs(e.y-p.y)<8){ hit=e; break; }
+    }
+    if(!hit) for(const e of ents){
+      if(e.dead || !foe(e.side,p.side) || e.kind==="gunnest") continue;   // empty nests absorb nothing
       const r = e.building ? 8 : 6.5;
       if(Math.abs(e.x-p.x)<r && Math.abs(e.y-p.y)<r){ hit=e; break; }
     }
@@ -1596,10 +1691,18 @@ function resolveOrders(data){
   golds[mySide]+=costOfSide(mySide,myOrders);   // refund both currencies, deduct canonically below
   magics[mySide]+=costMagicOf(myOrders);
   myOrders=[]; upgradeQueued=false; pendingTech={};
+  for(const e of ents) if(e.gPending){ e.gHp=0; e.gPending=false; }   // undo optimistic garrisons; re-applied canonically below
   for(const s of SIDES) activeMods[s]={};         // rebuild armed modifiers canonically from the orders below
   // every client tracks all sides' gold & magic, so each can verify nobody overspent
   for(const side of SIDES){
-    const troopOrders=(data[side]||[]).filter(o=>KINDS[o.kind]&&KINDS[o.kind].troop).length;
+    const orders=data[side]||[];
+    // garrison soldiers (placed onto a Gun Nest — existing, or ordered earlier this same turn) don't count as troops
+    const troopOrders=orders.filter(o=>{
+      if(!KINDS[o.kind]||!KINDS[o.kind].troop) return false;
+      if(o.kind==="soldier" && (nestGarrisonTarget(side,o.gx,o.gy) ||
+         orders.some(q=>q.kind==="gunnest"&&q.gx===o.gx&&q.gy===o.gy))) return false;
+      return true;
+    }).length;
     if(costOfSide(side,data[side]||[]) > golds[side]+1e-6 ||
        costMagicOf(data[side]||[]) > magics[side]+1e-6 ||
        troopCount(side)+troopOrders > TROOP_LIMIT){
@@ -1627,6 +1730,7 @@ function resolveOrders(data){
         const e=findSellTarget(side,o);
         if(e){
           golds[side]+=Math.floor(KINDS[e.kind].cost*SELL_RATE);
+          if(e.kind==="gunnest") ejectGunner(e,1);   // sold nest frees its gunner
           e.dead=true;
           puff(e.x,e.y,PAL.gold,6);
         }
@@ -1638,6 +1742,11 @@ function resolveOrders(data){
           magics[side]-=KINDS[o.kind].cost;
           spellsQueued.push({side, x:cellCx(o.gx), y:cellCx(o.gy), kind:o.kind});
         }
+      }
+      else if(o.kind==="soldier" && nestGarrisonTarget(side,o.gx,o.gy)){   // garrison instead of spawning
+        golds[side]-=KINDS.soldier.cost;
+        garrisonNest(nestGarrisonTarget(side,o.gx,o.gy));
+        puff(cellCx(o.gx),cellCx(o.gy), teamCol(side), 8);
       }
       else if(!atKindLimit(side,o.kind) && validSpot(side,o.gx,o.gy,o.kind)){
         golds[side]-=KINDS[o.kind].cost;
@@ -2604,6 +2713,32 @@ function drawHarvester(e){
   drawUpgradeRing(e,9);                         // upgrade ring
   if(showBar(e)) drawHpBar(e,x+2,y-8,12);
 }
+function drawGunNest(e){
+  const x=e.gx*CELL, y=e.gy*CELL, manned=e.gHp>0;
+  const a=e.aim!==undefined?e.aim:(facesRight(e.side)?0:Math.PI);
+  // sandbag parapet on the wall top
+  px(x+2,y+10,12,4,"#57503e"); px(x+2,y+10,12,1,"#6f6650");
+  px(x+3,y+9,3,2,"#655c46"); px(x+7,y+9,3,2,"#5d5440"); px(x+11,y+9,2,2,"#655c46");
+  // swivel mount + barrel toward the aim
+  ctx.save(); ctx.translate(e.x,e.y-1); ctx.rotate(a);
+  ctx.fillStyle="#23262e"; ctx.fillRect(1,-1,8,2);
+  ctx.fillStyle="#3d424e"; ctx.beginPath(); ctx.arc(0,0,2.6,0,7); ctx.fill();
+  ctx.restore();
+  if(manned){                                        // helmeted gunner crouched behind the gun
+    const gx2=e.x-Math.cos(a)*3.4, gy2=e.y-2-Math.sin(a)*2;
+    ctx.fillStyle=teamColDark(e.side); ctx.beginPath(); ctx.arc(gx2,gy2,2.2,0,7); ctx.fill();
+    ctx.fillStyle=teamCol(e.side);     ctx.beginPath(); ctx.arc(gx2,gy2,1.4,0,7); ctx.fill();
+  } else if(e.side===mySide && Math.floor(animT*1.5)%2){   // vacant: blink a reminder for the owner
+    ctx.font="bold 7px monospace"; ctx.textAlign="center"; ctx.fillStyle="#ff6b6b";
+    ctx.fillText("!",e.x,e.y-7);
+  }
+  if(manned && e.reload>0){                          // reload bar while the gunner swaps magazines
+    const f=1-e.reload/tstat(e.side,"gunnest","reload");
+    px(x+2,y+15,12,2,"#2a2f45"); px(x+2,y+15,Math.round(12*f),2,"#ffa65a");
+  }
+  drawUpgradeRing(e,8);
+  if(manned && showBar(e)) drawHpBar(e,x+2,y-8,12);  // the bar is the GUNNER's health
+}
 function drawTurret(e){
   const x=e.gx*CELL,y=e.gy*CELL, me=facesRight(e.side), col=teamCol(e.side);
   px(x+3,y+9,10,6,PAL.stoneDark);
@@ -2721,6 +2856,7 @@ function drawHpBar(e,x,y,w){
 function rangeOf(e){
   if(e.kind==="tower")  return TOWER_LEVELS[e.level||1].range;
   if(e.kind==="turret") return tstat(e.side,"turret","range");
+  if(e.kind==="gunnest") return gunRange(e.side);
   if(e.kind==="archer") return tstat(e.side,"archer","range");
   if(e.kind==="tank")   return KINDS.tank.range;
   return 0;
@@ -2885,6 +3021,7 @@ function render(){
     else if(e.kind==="wall") drawWall(e);
     else if(e.kind==="harvester") drawHarvester(e);
     else if(e.kind==="turret") drawTurret(e);
+    else if(e.kind==="gunnest") drawGunNest(e);
     else if(e.kind==="catapult") drawCatapult(e);
     else if(e.kind==="spikes") drawSpikes(e);
     else if(e.kind==="duck") drawDuck(e);
@@ -3030,6 +3167,10 @@ function setMsgText(t){ document.getElementById("msg").textContent=t; }
 
 // ============================== PATCH NOTES ==============================
     const PATCH_NOTES = [
+  ["5.26.21.12",["🔫 NEW CARD: GUN NEST (💰12) — a machine-gun emplacement built ON TOP of one of your walls!",
+          "It needs a gunner: place a Soldier onto the nest to man it (garrisoned soldiers don't count toward the troop limit). Bursts of 20 shots at 1 dmg every 0.1s, then a 10s reload — upgrades take it to 3s reloads and 35-shot magazines. Its RANGE scales with your Soldier level (70 → 100).",
+          "Counterplay: enemy archers can snipe the gunner (replace him anytime, the nest survives). Melee can't touch the nest — but breaking the wall beneath destroys it, and the gunner bails out as a soldier at half HP.",
+          "Selling a manned nest sets its gunner free at full health. The wall under a nest can't be sold until the nest is."]],
   ["5.25.21.12",["ℹ️ Every card now has a little ⓘ button — tap it to pop up that card's stats (great for touch screens, where there's no hover). Tap it again, or select the card, to close it. Hovering still works on desktop."]],
   ["5.24.21.12",["🖥️ On wide screens, the card panel now sits to the LEFT of the battlefield with each category as a vertical column, making better use of the space. Narrower windows keep the card bar below the battlefield as before."]],
   ["5.23.21.12",["⚖️ New unit caps: maximum 3 Catapults and 1 Tank alive per side at a time. Their cards grey out once you hit the limit (and re-enable if one is destroyed or sold)."]],
@@ -3400,7 +3541,7 @@ function addToolSection(label, contents){
   return grid;
 }
 const CARD_CATS=[
-  ["Buildings", ["wall","harvester","turret","spikes","catapult","duck","magicwell"]],
+  ["Buildings", ["wall","gunnest","harvester","turret","spikes","catapult","duck","magicwell"]],
   ["Troops",    ["soldier","archer","brute","tank"]],
   ["Spells",    ["fireball","heal","shield"]],
 ];

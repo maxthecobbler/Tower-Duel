@@ -215,7 +215,7 @@
     </div>
   </div>
   <div id="menu">
-    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">5.26.23.15</span></h2>
+    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">6.26.23.15</span></h2>
     <div id="sceneSel">
       <button data-scene="forest" class="on">Forest</button>
       <button data-scene="beach">Beach</button>
@@ -236,6 +236,7 @@
         <h3>ONLINE</h3>
         <button onclick="menuCreate()">1v1</button>
         <button onclick="menuCreate3()">1v1v1</button>
+        <button onclick="menuCreate4()">2v2</button>
         <div class="joinrow">
           <input id="joinCode" maxlength="4" placeholder="CODE">
           <button onclick="menuJoin()">Join</button>
@@ -1677,10 +1678,10 @@ function startBattle(){
   if(RT||phase!=="build"||over||menuOpen) return;
   if(mode==="online"){
     if(waitingOrders) return;
-    if(isHost){ if(netN===3 ? guests.length<2 : !conn) return; }
+    if(isHost){ if(netN>=3 ? guests.length<netN-1 : !conn) return; }
     else if(!conn) return;
     waitingOrders=true; selected=null;
-    if(isHost){ myCommitted=true; if(netN===3) tryResolveP2P3(); else tryResolveP2P(); }
+    if(isHost){ myCommitted=true; if(netN>=3) tryResolveP2PHub(); else tryResolveP2P(); }
     else sendMsg({type:"orders", orders:myOrders});
     refreshUI();
     return;                       // battle starts when all players have committed
@@ -3194,6 +3195,8 @@ function setMsgText(t){ document.getElementById("msg").textContent=t; }
 
 // ============================== PATCH NOTES ==============================
     const PATCH_NOTES = [
+  ["6.26.23.15",["🌐 ONLINE 2v2! Four humans, two teams. Create a 2v2 room from the ONLINE column — the FIRST player to join your room is your teammate (Blue, left); the next two form the Red team (right).",
+          "The host relays all four players' orders and every client runs the same deterministic battle, exactly like online 1v1 and 1v1v1."]],
   ["5.26.23.15",["🧭 Troops no longer get stuck on ponds/groves: they now pick which way to go around based on the direction they're ALREADY moving (not the map's top/bottom), break dead-centre ties to the left, and commit to their chosen side until the path is clear."]],
   ["5.26.23.14",["⚖️ Gun Nest rebalanced: each bullet now deals 0.5 damage (a full 20-shot burst = 10). The duck (and its crab/goat cousins) stays at 0.1.",
           "HP readouts always show whole numbers — fractional damage rounds up on every display, including the top HUD."]],
@@ -3376,33 +3379,33 @@ function tryResolveP2P(){
   sendMsg({type:"resolve", data});
   resolveOrders(data);
 }
-// host (3-player hub): resolve once the host committed AND both guests' orders arrived
-function tryResolveP2P3(){
-  if(!isHost || netN!==3 || !myCommitted) return;
-  if(guests.length<2 || !guests.every(g=>g.orders)) return;
-  const data={p:myOrders};                     // host is always side "p"; guests are "b" and "c"
+// host (3/4-player hub): resolve once the host committed AND every guest's orders arrived
+function tryResolveP2PHub(){
+  if(!isHost || netN<3 || !myCommitted) return;
+  if(guests.length<netN-1 || !guests.every(g=>g.orders)) return;
+  const data={p:myOrders};                     // host is always side "p"; guests carry their assigned sides
   for(const g of guests) data[g.side]=g.orders;
   myCommitted=false; for(const g of guests) g.orders=null;
   broadcast({type:"resolve", data});
   resolveOrders(data);
 }
-// host: per-guest message handler (3-player)
+// host: per-guest message handler (3/4-player hub)
 function bindGuestConn(g){
   g.conn.on("data", m=>{
     if(!m||typeof m!=="object") return;
     if(m.type==="hello"){
       if(!menuOpen) return;                    // already started
       g.helloed=true;
-      const n=guests.filter(x=>x.helloed).length;
-      setMenuStatus(`Waiting for players… (${n}/2 joined)`, hostingCode);
-      if(guests.length===2 && guests.every(x=>x.helloed)){
+      const need=netN-1, n=guests.filter(x=>x.helloed).length;
+      setMenuStatus(`Waiting for players… (${n}/${need} joined)`, hostingCode);
+      if(guests.length===need && guests.every(x=>x.helloed)){
         const seed=Math.floor(Math.random()*2**31);
-        for(const gg of guests) gg.conn.send({type:"start", seed, scene:sceneKey, side:gg.side, players:3});
+        for(const gg of guests) gg.conn.send({type:"start", seed, scene:sceneKey, side:gg.side, players:netN});
         setMenuStatus("","");
-        beginMatch({mode:"online", seed, side:"p", players:3});
+        beginMatch({mode:"online", seed, side:"p", players:netN});
       }
     }
-    else if(m.type==="orders"){ g.orders=Array.isArray(m.orders)?m.orders:[]; tryResolveP2P3(); }
+    else if(m.type==="orders"){ g.orders=Array.isArray(m.orders)?m.orders:[]; tryResolveP2PHub(); }
   });
   g.conn.on("close", ()=>{ if(!over && !menuOpen) showBanner("🏳️ A player left the game","var(--good)"); });
   g.conn.on("error", ()=>{ if(!over && !menuOpen) showBanner("⚠️ Connection lost","var(--accent)"); });
@@ -3422,6 +3425,7 @@ function menu3(){ cleanupNet(); beginMatch({mode:"bot", players:3}); }
 function menu2v2(){ cleanupNet(); beginMatch({mode:"bot", players:4}); }
 function menuCreate(){ hostRoom(2); }
 function menuCreate3(){ hostRoom(3); }
+function menuCreate4(){ hostRoom(4); }
 function hostRoom(size){
   if(!peerReady()) return;
   cleanupNet();
@@ -3431,7 +3435,8 @@ function hostRoom(size){
   peer=new Peer(peerId(code), PEER_OPTS);
   peer.on("open", ()=>{
     hostingCode=code;
-    setMenuStatus(size===3 ? "Share this code — waiting for 2 players to join:"
+    setMenuStatus(size===4 ? "Share this code — waiting for 3 players. The FIRST to join is YOUR teammate:"
+                : size===3 ? "Share this code — waiting for 2 players to join:"
                            : "Share this code with a friend (they join from their own device or a 2nd window):", code);
   });
   peer.on("disconnected", ()=>{ try{ peer.reconnect(); }catch(e){} });
@@ -3442,12 +3447,13 @@ function hostRoom(size){
   });
   peer.on("connection", c=>{
     isHost=true;
-    if(size===3){
-      if(guests.length>=2 || !menuOpen){ try{c.close();}catch(e){} return; }   // room full / already started
-      const g={conn:c, side: guests.length===0?"b":"c", orders:null, helloed:false};
+    if(size>=3){
+      if(guests.length>=size-1 || !menuOpen){ try{c.close();}catch(e){} return; }   // room full / already started
+      // 2v2 side order: 1st joiner = "c" (the HOST'S teammate), then "b","d" (the enemy team)
+      const g={conn:c, side: (size===4?["c","b","d"]:["b","c"])[guests.length], orders:null, helloed:false};
       guests.push(g);
       bindGuestConn(g);                               // bind BEFORE open — no message can be missed
-      const onOpen=()=>setMenuStatus(`Player connected (${guests.length}/2)…`, hostingCode);
+      const onOpen=()=>setMenuStatus(`Player connected (${guests.length}/${size-1})…`, hostingCode);
       if(c.open) onOpen(); else c.on("open", onOpen);
       return;
     }
@@ -3726,7 +3732,8 @@ function refreshUI(){
   const act = IS_TOUCH ? "tap" : "click";
   const cancelHint = IS_TOUCH ? "Tap the tool again to cancel." : "Right-click to cancel.";
   const deselectHint = IS_TOUCH ? "Tap the tool again to deselect." : "<kbd>Esc</kbd>/right-click to deselect.";
-  const sideTxt = NP===3 ? (mySide==="p"?"🔵 blue":mySide==="b"?"🔴 red":"🟢 green")
+  const sideTxt = NP===4 ? ((mySide==="p"||mySide==="c") ? "left 🔵 team" : "right 🔴 team")
+                : NP===3 ? (mySide==="p"?"🔵 blue":mySide==="b"?"🔴 red":"🟢 green")
                          : (mySide==="p" ? "left 🔵" : "right 🔴");
   if(waitingOrders) msg.textContent="⏳ Orders locked in — waiting for the other players…";
   else if(phase==="battle" && !RT)

@@ -215,7 +215,7 @@
     </div>
   </div>
   <div id="menu">
-    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">6.26.23.15</span></h2>
+    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">6.27.23.15</span></h2>
     <div id="sceneSel">
       <button data-scene="forest" class="on">Forest</button>
       <button data-scene="beach">Beach</button>
@@ -319,6 +319,8 @@ function setMap(cols,rows){
 const TOWER_HP=200, START_GOLD=14, BASE_INCOME=8, HARVEST_INCOME=3;
 const START_MAGIC=5, BASE_MAGIC=1;
 const BATTLE_MAX=15;                          // seconds per battle phase
+const BUILD_MAX=30;                           // ONLINE only: build-phase time limit (auto-locks your orders)
+let buildT=0, buildStart=0;                   // wall-clock build countdown (online turn-based only) — immune to tab throttling
 
 const KINDS = {
   wall:     {label:"Wall",     icon:"🧱", cost:3,  hp:40,  building:true},
@@ -3135,6 +3137,11 @@ function render(){
     ctx.fillStyle="rgba(255,215,94,.9)"; ctx.font="bold 8px monospace";
     ctx.fillText("⚔ BATTLE "+Math.ceil(BATTLE_MAX-battleT)+"s ⚔", W/2, 10);
   }
+  else if(mode==="online" && !RT && phase==="build" && !waitingOrders && !over && !menuOpen){
+    const left=Math.max(0,Math.ceil(BUILD_MAX-buildT));   // online build countdown (auto-locks at 0)
+    ctx.fillStyle=left<=5?"rgba(255,107,107,.95)":"rgba(255,215,94,.9)"; ctx.font="bold 8px monospace";
+    ctx.fillText("⏱ BUILD "+left+"s", W/2, 10);
+  }
   ctx.restore();
 }
 
@@ -3150,6 +3157,13 @@ function loop(now){
   if(menuOpen && !musicOn) startMusic();               // chiptune plays on the main menu only
   else if(!menuOpen && musicOn) stopMusic();
   updateJoy();                                          // touch joystick shows only while a tank is drivable
+  // ONLINE turn limit: 30s to build, then your orders lock in automatically (bot modes are untimed).
+  // Measured from the wall clock, so a backgrounded/throttled tab can't stall the countdown.
+  if(mode==="online" && !RT && phase==="build" && !waitingOrders && !over && !menuOpen){
+    if(!buildStart) buildStart=now;
+    buildT=(now-buildStart)/1000;
+    if(buildT>=BUILD_MAX){ buildStart=0; buildT=0; startBattle(); }
+  } else { buildStart=0; buildT=0; }
   if(phase==="battle"){
     acc+=dt;
     while(acc>=SIM_STEP && phase==="battle"){ updateBattle(SIM_STEP); acc-=SIM_STEP; }
@@ -3195,6 +3209,7 @@ function setMsgText(t){ document.getElementById("msg").textContent=t; }
 
 // ============================== PATCH NOTES ==============================
     const PATCH_NOTES = [
+  ["6.27.23.15",["⏱ ONLINE matches now have a 30-second build timer — a countdown shows above the battlefield (red in the last 5s), and when it hits zero your orders lock in automatically. No more waiting forever on a slow opponent. Bot modes stay untimed."]],
   ["6.26.23.15",["🌐 ONLINE 2v2! Four humans, two teams. Create a 2v2 room from the ONLINE column — the FIRST player to join your room is your teammate (Blue, left); the next two form the Red team (right).",
           "The host relays all four players' orders and every client runs the same deterministic battle, exactly like online 1v1 and 1v1v1."]],
   ["5.26.23.15",["🧭 Troops no longer get stuck on ponds/groves: they now pick which way to go around based on the direction they're ALREADY moving (not the map's top/bottom), break dead-centre ties to the left, and commit to their chosen side until the path is clear."]],

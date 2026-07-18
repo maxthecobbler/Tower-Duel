@@ -215,7 +215,7 @@
     </div>
   </div>
   <div id="menu">
-    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">5.26.23.14</span></h2>
+    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">5.26.23.15</span></h2>
     <div id="sceneSel">
       <button data-scene="forest" class="on">Forest</button>
       <button data-scene="beach">Beach</button>
@@ -2133,30 +2133,39 @@ function dirClear(e,ang,probe){
   }
   return true;
 }
-// walk toward (tx,ty); if a pond/grove blocks the way, veer around the side the troop is already closer to
+// walk toward (tx,ty); if a pond/grove blocks the way, veer around it. The side is chosen RELATIVE
+// to the direction the troop is already moving (dead-centre ties break LEFT), and the choice is
+// remembered while blocked so the troop commits to one way around instead of dithering and getting stuck.
 function moveToward(e,tx,ty,spd,dt){
   const base=Math.atan2(ty-e.y,tx-e.x), probe=12;
   let ang=base;
   if(!dirClear(e,base,probe)){
-    const ux=Math.cos(base), uy=Math.sin(base);
-    // find the nearest blocking obstacle ahead, then pick the shorter way around (the side the troop is offset toward)
-    let blocker=null, bd=1e9;
-    for(const o of OBS_CIRCLES){
-      if(o.g && !groveAlive(o.g)) continue;
-      const d=hyp(e.x+ux*probe-o.x, e.y+uy*probe-o.y);
-      if(d < o.r+bodyR(e)+1 && d<bd){ bd=d; blocker=o; }
-    }
-    let dir=-1;                                     // default: veer left
-    if(blocker){
-      const leftness = uy*(e.x-blocker.x) - ux*(e.y-blocker.y);  // >0 = troop is on the LEFT of the obstacle
-      dir = leftness>0 ? -1 : 1;                    // on the left → go left; on the right → go right
+    let dir=e.steerDir||0;
+    if(!dir){
+      // heading = the way the troop is ALREADY moving (falls back to the target direction when standing)
+      const mv=hyp(e.vx||0,e.vy||0);
+      const ha=mv>1 ? Math.atan2(e.vy,e.vx) : base;
+      const ux=Math.cos(ha), uy=Math.sin(ha);
+      // find the nearest blocking obstacle ahead
+      let blocker=null, bd=1e9;
+      for(const o of OBS_CIRCLES){
+        if(o.g && !groveAlive(o.g)) continue;
+        const d=hyp(e.x+Math.cos(base)*probe-o.x, e.y+Math.sin(base)*probe-o.y);
+        if(d < o.r+bodyR(e)+1 && d<bd){ bd=d; blocker=o; }
+      }
+      dir=-1;                                       // no blocker identified → veer left
+      if(blocker){
+        const leftness = uy*(e.x-blocker.x) - ux*(e.y-blocker.y);  // >0 = obstacle is to the troop's RIGHT of its motion
+        dir = leftness>=0 ? -1 : 1;                 // middle or left-of-motion → go LEFT; otherwise right
+      }
+      e.steerDir=dir;                               // commit until the way ahead is clear again
     }
     for(let i=1;i<=9;i++){                          // sweep the chosen direction in 18° steps (up to ~160°)
       const a=base + dir*i*(Math.PI/10);
       if(dirClear(e,a,probe)){ ang=a; break; }
       ang=a;
     }
-  }
+  } else e.steerDir=0;                              // clear path: forget the committed side
   e.x+=Math.cos(ang)*spd*dt;
   e.y+=Math.sin(ang)*spd*dt;
 }
@@ -3185,6 +3194,7 @@ function setMsgText(t){ document.getElementById("msg").textContent=t; }
 
 // ============================== PATCH NOTES ==============================
     const PATCH_NOTES = [
+  ["5.26.23.15",["🧭 Troops no longer get stuck on ponds/groves: they now pick which way to go around based on the direction they're ALREADY moving (not the map's top/bottom), break dead-centre ties to the left, and commit to their chosen side until the path is clear."]],
   ["5.26.23.14",["⚖️ Gun Nest rebalanced: each bullet now deals 0.5 damage (a full 20-shot burst = 10). The duck (and its crab/goat cousins) stays at 0.1.",
           "HP readouts always show whole numbers — fractional damage rounds up on every display, including the top HUD."]],
   ["5.26.22.14",["💚 The Heal spell now heals EVERYTHING of yours — troops, turrets, harvesters, walls, catapults, ducks, mana wells, even gun-nest gunners. Only the main tower is excluded."]],

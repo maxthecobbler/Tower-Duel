@@ -29,10 +29,10 @@
     background:var(--panel);padding:8px;border-radius:12px;border:1px solid #2c3050;
     transition:opacity .3s}
   #toolbar.away{opacity:.45;pointer-events:none}
-  #cardSections{display:flex;flex-direction:column;gap:6px;width:100%}
+  /* stacked layout: sections FLOW — small sections (Troops, Spells…) share a row when they fit */
+  #cardSections{display:flex;flex-flow:row wrap;gap:8px 18px;width:100%;justify-content:center;align-items:stretch}
   /* card categories: label on the left, cards flowing to the right (default / narrow) */
-  .cardSection{display:flex;align-items:center;gap:8px}
-  .cardSection:not(:last-child){padding-bottom:6px;border-bottom:1px solid #2c3050}
+  .cardSection{display:flex;align-items:center;gap:8px;flex:0 1 auto}
   .secLabel{flex:0 0 60px;text-align:right;font-size:.6em;letter-spacing:1px;color:var(--dim);
     font-weight:bold;text-transform:uppercase}
   .cardGrid{display:flex;flex-wrap:wrap;gap:5px;flex:1;align-items:stretch;justify-content:flex-start}
@@ -156,7 +156,7 @@
     #playArea{flex-direction:row-reverse;align-items:flex-start;justify-content:center;gap:14px;width:auto}
     #wrap{width:min(940px, calc(94vw - 360px))}
     #toolbar{width:auto;margin-top:0}
-    #cardSections{flex-direction:row;align-items:flex-start;gap:0}
+    #cardSections{flex-flow:row nowrap;align-items:flex-start;gap:0}
     .cardSection{flex-direction:column;align-items:center;gap:5px;padding:0 8px}
     .cardSection:not(:last-child){padding-bottom:0;border-bottom:none;border-right:1px solid #2c3050}
     .cardGrid{flex-direction:column;flex:none;align-items:stretch;justify-content:flex-start}
@@ -177,7 +177,7 @@
     .tool .up{top:-7px;right:-4px;padding:2px 6px;font-size:.62em}   /* bigger tap target */
     .tool .info{bottom:-7px;left:-4px;padding:2px 7px;font-size:.7em}   /* bigger tap target */
     .secLabel{flex-basis:100%;text-align:left;font-size:.62em;margin-bottom:1px}   /* label on its own line */
-    .cardSection{flex-wrap:wrap}
+    .cardSection{flex-wrap:wrap;flex:1 1 auto}    /* sections sharing a row split the width */
     #fight{font-size:1em;padding:8px 18px;min-width:0;flex:none}
     #tip{max-width:92vw;font-size:.75em}
     #menu button{font-size:.95em;padding:11px 8px;min-width:0}
@@ -215,7 +215,7 @@
     </div>
   </div>
   <div id="menu">
-    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">6.28.23.15</span></h2>
+    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">6.28.23.16</span></h2>
     <div id="sceneSel">
       <button data-scene="forest" class="on">Forest</button>
       <button data-scene="beach">Beach</button>
@@ -3232,6 +3232,7 @@ function setMsgText(t){ document.getElementById("msg").textContent=t; }
 
 // ============================== PATCH NOTES ==============================
     const PATCH_NOTES = [
+  ["6.28.23.16",["🗂️ Compacter card bar on narrow windows: small sections now share a row when they fit (e.g., Troops + Spells side by side) instead of always stacking. Wide-screen side-panel layout unchanged."]],
   ["6.28.23.15",["⬆️ ONLINE: tower and card upgrades now take effect IMMEDIATELY when you buy them, instead of showing \"queued\" until the battle. Levels, stats, and existing units' HP update on the spot — and you can chain several tower upgrades in one turn, just like offline."]],
   ["6.27.23.15",["⏱ ONLINE matches now have a 30-second build timer — a countdown shows above the battlefield (red in the last 5s), and when it hits zero your orders lock in automatically. No more waiting forever on a slow opponent. Bot modes stay untimed."]],
   ["6.26.23.15",["🌐 ONLINE 2v2! Four humans, two teams. Create a 2v2 room from the ONLINE column — the FIRST player to join your room is your teammate (Blue, left); the next two form the Red team (right).",

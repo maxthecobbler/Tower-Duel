@@ -229,7 +229,7 @@
     </div>
   </div>
   <div id="menu">
-    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">6.30.24.17</span></h2>
+    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">6.30.24.18</span></h2>
     <div id="sceneSel">
       <button data-scene="forest" class="on">Forest</button>
       <button data-scene="beach">Beach</button>
@@ -1287,6 +1287,15 @@ function fireMyTanks(x,y){                       // click-to-fire: every loaded 
     if(!e.dead && e.kind==="tank" && tankManual(e) && e.cd<=0){ fireShell(e,x,y); fired=true; }
   return fired;
 }
+// where a projectile is actually DRAWN (arcing shots ride above their ground position) — so the ballista aims true
+function projVisual(t){
+  if(t.pkind){
+    if(t.pkind==="boulder"||t.pkind==="shell")
+      return {x:t.x, y:t.y - Math.sin(Math.min(1,(t.t0||0)/(t.flight||1))*Math.PI)*(t.arc||24)};
+    return {x:t.x, y:t.y};                            // flat-flying cannonball
+  }
+  return {x:t.x, y:t.y-(t.arc||0)};                   // fireball (arc stored on f.arc)
+}
 // ballista: find the nearest ENEMY projectile with health (turret ball / catapult boulder / fireball) in range
 function nearestEnemyProjectile(e,range){
   let best=null, bd=1e9;
@@ -1303,14 +1312,16 @@ function nearestEnemyProjectile(e,range){
 // ballista bolt: 1 damage to a projectile; when its HP runs out it's intercepted (destroyed, no detonation)
 function fireBolt(e,target){
   target.hp-=KINDS.ballista.dmg;
-  e.boltT=0.13; e.boltX=target.x; e.boltY=target.y;
+  const v=projVisual(target);                  // hit where the projectile is actually drawn (mid-air, arc included)
+  e.boltT=0.13; e.boltX=v.x; e.boltY=v.y;
   parts.push({x:e.x,y:e.y-2,vx:0,vy:0,life:.08,t:0,size:2,color:PAL.flash,flash:true});
+  puff(v.x,v.y,"#e8eefb",2);
   sfx("shoot");
   if(target.hp<=0){
     if(target.pkind) target.shotDown=true;     // a projs[] entry — flagged so it won't detonate
     else target.done=true;                     // a fireball — removed without exploding
-    boom(target.x,target.y,"#e8eefb",8);
-    floatText(target.x,target.y-8,"intercepted!","#cfe0ff");
+    boom(v.x,v.y,"#e8eefb",8);
+    floatText(v.x,v.y-8,"intercepted!","#cfe0ff");
   }
 }
 
@@ -1629,7 +1640,8 @@ function updateBattle(dt){
         e.shotT=Math.max(0,(e.shotT||0)-dt);
         const t=nearestEnemyProjectile(e, tstat(e.side,"ballista","range"));
         if(t){
-          e.aim=Math.atan2(t.y-e.y,t.x-e.x);
+          const v=projVisual(t);
+          e.aim=Math.atan2(v.y-e.y,v.x-e.x);       // aim at the drawn (arced) position, not the ground shadow
           if(e.shotT<=0 && e.mag>0){
             e.shotT=KINDS.ballista.shotCd; e.mag--;
             fireBolt(e,t);
@@ -3375,6 +3387,7 @@ function setMsgText(t){ document.getElementById("msg").textContent=t; }
 
 // ============================== PATCH NOTES ==============================
     const PATCH_NOTES = [
+  ["6.30.24.18",["🎯 Fixed the ballista's aim: it now points its bolt at where arcing projectiles (fireballs & catapult boulders) actually are in the air, instead of their shadow on the ground."]],
   ["6.30.24.17",["🦘 Two new one-time card MODIFIERS (arm them beside the ⬆ upgrade during build): Soldier 'Wall Vault' (💰3) — your soldiers ignore & pass straight through enemy walls this turn instead of attacking them.",
           "🥾 Brute 'Trample' (💰4) — your brutes plow through groves, destroying any trees they walk over for the rest of the game."]],
   ["6.30.23.17",["🎯 NEW CARD: BALLISTA (💰75) — shoots down incoming enemy PROJECTILES! Projectiles now have health: turret cannonballs 5, catapult boulders 10, fireballs 15.",

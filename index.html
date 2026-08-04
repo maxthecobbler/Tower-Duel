@@ -24,6 +24,13 @@
   #hud .gold{color:var(--accent);font-weight:bold;font-size:1.1em}
   #hud .dim{color:var(--dim);font-size:.9em}
   #playArea{display:flex;flex-direction:column;align-items:center;width:100%}
+  /* stacked layout: fieldCol dissolves so its children join #playArea's column; `order` slots the
+     toolbar BETWEEN the fight button (right under the battlefield) and the ranges/health bars */
+  #fieldCol{display:contents}
+  #fight{order:1;width:min(96vw,940px);margin-top:10px}
+  #toolbar{order:2}
+  #rangeBar{order:3}
+  #healthBar{order:4}
   #toolbar{display:flex;flex-direction:column;gap:6px;align-items:stretch;
     margin-top:10px;width:min(96vw,940px);
     background:var(--panel);padding:8px;border-radius:12px;border:1px solid #2c3050;
@@ -154,14 +161,17 @@
   /* ---------- wide screens: card panel moves to the LEFT of the battlefield, categories as columns ---------- */
   @media (min-width:1300px){
     #playArea{flex-direction:row-reverse;align-items:flex-start;justify-content:center;gap:14px;width:auto}
-    #wrap{width:min(940px, calc(94vw - 360px))}
+    /* battlefield column: field, then FIGHT, then the ranges/health bars fill the empty space below */
+    #fieldCol{display:flex;flex-direction:column;align-items:center;gap:2px;width:min(940px, calc(94vw - 360px))}
+    #wrap{width:100%}
+    #fight{order:0;width:100%;margin-top:8px}
+    #rangeBar,#healthBar{order:0;width:100%}
     #toolbar{width:auto;margin-top:0}
     #cardSections{flex-flow:row nowrap;align-items:flex-start;gap:0}
     .cardSection{flex-direction:column;align-items:center;gap:5px;padding:0 8px}
     .cardSection:not(:last-child){padding-bottom:0;border-bottom:none;border-right:1px solid #2c3050}
     .cardGrid{flex-direction:column;flex:none;align-items:stretch;justify-content:flex-start}
     .secLabel{flex:none;width:100%;text-align:center}
-    #fight{width:100%;margin-top:8px}
   }
   /* ---------- phones / narrow screens ---------- */
   @media (max-width:640px){
@@ -178,7 +188,7 @@
     .tool .info{bottom:-7px;left:-4px;padding:2px 7px;font-size:.7em}   /* bigger tap target */
     .secLabel{flex-basis:100%;text-align:left;font-size:.62em;margin-bottom:1px}   /* label on its own line */
     .cardSection{flex-wrap:wrap;flex:1 1 auto}    /* sections sharing a row split the width */
-    #fight{font-size:1em;padding:8px 18px;min-width:0;flex:none}
+    #fight{font-size:1em;padding:8px 18px;min-width:0;flex:none;width:100vw}
     #tip{max-width:92vw;font-size:.75em}
     #menu button{font-size:.95em;padding:11px 8px;min-width:0}
     #modeCols{gap:8px;width:96vw}
@@ -193,6 +203,7 @@
 </head>
 <body>
 <div id="playArea">
+<div id="fieldCol">
 <div id="wrap">
   <canvas id="cv" width="448" height="240"></canvas>
   <div id="hud">
@@ -215,7 +226,7 @@
     </div>
   </div>
   <div id="menu">
-    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">6.28.23.16</span></h2>
+    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">6.28.23.17</span></h2>
     <div id="sceneSel">
       <button data-scene="forest" class="on">Forest</button>
       <button data-scene="beach">Beach</button>
@@ -252,9 +263,6 @@
     <button id="notesClose" onclick="hideNotes()">✕ Close</button>
   </div>
 </div>
-<div id="toolbar"></div>
-</div>
-<div id="joy"><div id="joyKnob"></div></div>
 <div id="rangeBar">
   <span>👁 Show ranges:</span>
   <button data-r="p">🔵 Blue</button>
@@ -269,6 +277,10 @@
   <button data-h="c" class="three-only">🟢 Green</button>
   <button data-h="both">⚔ Both</button>
 </div>
+</div>
+<div id="toolbar"></div>
+</div>
+<div id="joy"><div id="joyKnob"></div></div>
 <div id="msg">Select a building or troop, then click your (left) side to place it. <kbd>Esc</kbd>/right-click to deselect.</div>
 
 <script>
@@ -3232,6 +3244,7 @@ function setMsgText(t){ document.getElementById("msg").textContent=t; }
 
 // ============================== PATCH NOTES ==============================
     const PATCH_NOTES = [
+  ["6.28.23.17",["⚔️ The FIGHT! button now sits right underneath the battlefield in every layout. On wide screens, the Show-ranges and Show-health toggles moved up into the empty space below the battlefield too."]],
   ["6.28.23.16",["🗂️ Compacter card bar on narrow windows: small sections now share a row when they fit (e.g., Troops + Spells side by side) instead of always stacking. Wide-screen side-panel layout unchanged."]],
   ["6.28.23.15",["⬆️ ONLINE: tower and card upgrades now take effect IMMEDIATELY when you buy them, instead of showing \"queued\" until the battle. Levels, stats, and existing units' HP update on the spot — and you can chain several tower upgrades in one turn, just like offline."]],
   ["6.27.23.15",["⏱ ONLINE matches now have a 30-second build timer — a countdown shows above the battlefield (red in the last 5s), and when it hits zero your orders lock in automatically. No more waiting forever on a slow opponent. Bot modes stay untimed."]],
@@ -3691,9 +3704,9 @@ sellTroopBtn.onmouseleave=hideTip;
 const fightBtn=document.createElement("button");
 fightBtn.id="fight"; fightBtn.textContent="⚔️ FIGHT!";
 fightBtn.onclick=startBattle;
-// Actions row (tower upgrade + sell tools), then FIGHT spans the full width beneath everything
 addToolSection("Actions", [upBtn, sellBtn, sellTroopBtn]);
-toolbar.appendChild(fightBtn);
+// FIGHT lives in the battlefield column, right under the field (before the ranges/health bars)
+document.getElementById("fieldCol").insertBefore(fightBtn, document.getElementById("rangeBar"));
 
 function refreshUI(){
   document.getElementById("gold").textContent=golds[mySide];
@@ -3763,6 +3776,7 @@ function refreshUI(){
   fightBtn.textContent = mode==="online" ? (waitingOrders?"⏳ Waiting…":"✅ READY") : "⚔️ FIGHT!";
   fightBtn.disabled = phase!=="build" || waitingOrders;
   toolbar.style.display = menuOpen ? "none" : "flex";
+  fightBtn.style.display = menuOpen ? "none" : "";     // FIGHT sits outside the toolbar now — hide it with the menu too
   document.getElementById("rangeBar").style.display = menuOpen ? "none" : "flex";
   document.getElementById("healthBar").style.display = menuOpen ? "none" : "flex";
   document.getElementById("menuBtn").classList.toggle("hidden", menuOpen);

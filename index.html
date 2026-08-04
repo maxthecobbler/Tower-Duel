@@ -229,7 +229,7 @@
     </div>
   </div>
   <div id="menu">
-    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">6.29.23.17</span></h2>
+    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">6.30.23.17</span></h2>
     <div id="sceneSel">
       <button data-scene="forest" class="on">Forest</button>
       <button data-scene="beach">Beach</button>
@@ -345,6 +345,7 @@ const KINDS = {
   catapult: {label:"Catapult", icon:"🪨", cost:50, hp:40,  building:true, gw:2, range:800, cd:10, aoe:16, dmgBuilding:15, dmgTroop:5},
   duck:     {label:"Duck",     icon:"🦆", cost:6,  hp:16,  building:true, water:true, range:70, cd:1.0, slow:1.6, dmg:0.1},
   gunnest:  {label:"Gun Nest", icon:"🔫", cost:12, hp:1,   building:true, needsWall:true, dmg:0.5, shotCd:0.1},
+  ballista: {label:"Ballista", icon:"🎯", cost:15, hp:30,  building:true, backHalf:true, dmg:1, shotCd:0.75},
   magicwell:{label:"Mana Well",icon:"🔮", cost:5,  hp:20,  building:true, magicWater:true},
   soldier:  {label:"Soldier",  icon:"⚔️", cost:4,  hp:10,  troop:true, spd:32, range:11, dmg:3, cd:0.7, aggro:60},
   archer:   {label:"Archer",   icon:"🏹", cost:6,  hp:9,   troop:true, spd:26, range:66, dmg:2, cd:0.9, aggro:95},
@@ -364,6 +365,7 @@ const TECH={
   catapult: [null,{cost:0,cd:10,dmgBuilding:15,dmgTroop:5},{cost:55,cd:7,dmgBuilding:18,dmgTroop:5},{cost:70,cd:5,dmgBuilding:22,dmgTroop:6},{cost:90,cd:3,dmgBuilding:27,dmgTroop:7}],
   duck:     [null,{cost:0,cd:1.0,slow:1.6},    {cost:6, cd:0.8,slow:2.0},    {cost:10,cd:0.65,slow:2.4},   {cost:16,cd:0.5,slow:3.0}],
   gunnest:  [null,{cost:0,reload:10,mag:20},   {cost:10,reload:7,mag:24},    {cost:18,reload:5,mag:29},    {cost:28,reload:3,mag:35}],   // faster reloads + bigger magazines; RANGE comes from the soldier's level
+  ballista: [null,{cost:0,range:110,mag:7,reload:10},{cost:10,range:140,mag:8,reload:8},{cost:18,range:170,mag:9,reload:6},{cost:28,range:200,mag:10,reload:5}],   // bigger range + magazine; damage is always 1
   soldier:  [null,{cost:0,hp:10,dmg:3,cd:0.7}, {cost:8, hp:13,dmg:4,cd:0.62},{cost:14,hp:16,dmg:5,cd:0.55},{cost:22,hp:20,dmg:6,cd:0.48}],
   archer:   [null,{cost:0,hp:9,dmg:2,cd:0.9,range:66},{cost:8,hp:11,dmg:3,cd:0.8,range:74},{cost:14,hp:13,dmg:4,cd:0.7,range:82},{cost:22,hp:16,dmg:5,cd:0.6,range:92}],
   brute:    [null,{cost:0,spd:16,cd:1.2},      {cost:8, spd:20,cd:1.05},     {cost:14,spd:24,cd:0.9},      {cost:22,spd:29,cd:0.75}],
@@ -417,6 +419,7 @@ const TIPS={
   catapult:"40 HP — Siege engine that targets only enemy BUILDINGS (ignores walls), anywhere on the map. Lobs a boulder: 15 dmg to buildings, 5 to troops in the blast. Slow: fires every 10s (down to every 3s fully upgraded). Upgrades cost more than it does to build. Max 5 at once.",
   duck:"16 HP — Blue water only! Squirts water at enemy troops (range 70): slows them 50% for 1.6s and deals 0.1 dmg. Ferocious.",
   gunnest:"Build ON one of your walls. Needs a gunner: place a Soldier onto it to man it (doesn't count toward the troop limit). Burst of 20 shots (0.5 dmg every 0.1s), then reloads 10s → 3s & 35-shot mags fully upgraded. RANGE grows with your Soldier level. Enemy archers can pick off the gunner (replace him anytime); if the wall breaks, the nest falls and the gunner bails out at half HP.",
+  ballista:"30 HP — Anti-siege! Shoots down enemy PROJECTILES: turret cannonballs (5 HP), catapult boulders (10 HP) and fireballs (15 HP). Each bolt does 1 damage, fires every 0.75s in a burst of 7 (up to 10), then reloads 10s → 5s. Upgrades add range & magazine. Only buildable in the BACK HALF of your side. Cluster several to melt incoming fire.",
   magicwell:"20 HP — Place on a PURPLE magic pond. Harvests +3 🔮 magic every turn (spells cost magic). Its killer loots 25% of its lifetime earnings!",
   soldier:"10 HP — 3 dmg / 0.7s melee. Speed 32, detection 60.",
   archer:"9 HP — 2 dmg / 0.9s at range 66. Speed 26, detection 95 (spots enemies early).",
@@ -681,6 +684,15 @@ function inTerritory(side,gx,gy){
   return side==="p" ? gx>=0&&gx<=P_MAXCOL : gx>=B_MINCOL&&gx<COLS;
 }
 function bagAt(gx,gy){ return moneybags.some(b=>b.gx===gx && b.gy===gy); }
+// the back half of a side's territory = the portion closest to its own tower (for the ballista)
+function inBackHalf(side,gx,gy){
+  if(NP===3 && TRI){                                   // triangle: closer to your vertex than to the centre
+    const cx=cellCx(gx), cy=cellCx(gy), v=TRI[side];
+    return hyp(cx-v.x,cy-v.y) <= hyp(cx-TRI.mid.x,cy-TRI.mid.y);
+  }
+  return facesRight(side) ? gx<=Math.floor(P_MAXCOL/2)      // left-tower sides → left half of their columns
+                          : gx>=Math.ceil((B_MINCOL+COLS-1)/2);   // right-tower sides → right half
+}
 // ---- gun nest helpers: a wall-mounted MG that needs a wall under it and a soldier in it ----
 function ownWallAt(side,gx,gy){ return ents.some(o=>!o.dead && !o.selling && o.kind==="wall" && o.side===side && o.gx===gx && o.gy===gy); }
 function nestOnCell(gx,gy){ return ents.find(o=>!o.dead && !o.selling && o.kind==="gunnest" && o.gx===gx && o.gy===gy); }
@@ -705,6 +717,7 @@ function ejectGunner(nest, frac){       // the gunner bails out as a regular sol
 function validSpot(side,gx,gy,kind){
   if(kind==="gunnest")                                  // nests mount ON one of your walls (one per wall)
     return gx>=0&&gx<COLS&&gy>=0&&gy<ROWS && inTerritory(side,gx,gy) && ownWallAt(side,gx,gy) && !nestOnCell(gx,gy);
+  if(kind==="ballista" && !inBackHalf(side,gx,gy)) return false;   // ballista: back half of your side only
   const gw=(KINDS[kind]&&KINDS[kind].gw)||1, gh=(KINDS[kind]&&KINDS[kind].gh)||1;
   for(let dx=0;dx<gw;dx++)for(let dy=0;dy<gh;dy++){    // every cell of the footprint must be free & legal
     const cx=gx+dx, cy=gy+dy;
@@ -1227,7 +1240,7 @@ function shoot(e,target,opts){
   const d=hyp(ax-sx,ay-sy)||1;                    // aim FROM the spawn point, not the body center
   projs.push({x:sx,y:sy,vx:(ax-sx)/d*spd,vy:(ay-sy)/d*spd,
     side:e.side, dmg:opts.dmg, aoe:opts.aoe||0, color:opts.color, size:opts.size||1.5, life:1.6,
-    pkind:opts.pkind||"arrow", slow:opts.slow||0, burn:opts.burn||0});
+    pkind:opts.pkind||"arrow", slow:opts.slow||0, burn:opts.burn||0, hp:opts.hp||0});   // hp>0 = a ballista can shoot it down
   parts.push({x:e.x,y:e.y-(opts.lift||0),vx:0,vy:0,life:.08,t:0,size:3,color:PAL.flash,flash:true});
   sfx("shoot");
 }
@@ -1237,7 +1250,7 @@ function lobBoulder(e,target){
   projs.push({x:sx, y:sy, vx:(tx-sx)/d*spd, vy:(ty-sy)/d*spd,
     side:e.side, siege:true, tx, ty, aoe:KINDS.catapult.aoe,
     dmgB:tstat(e.side,"catapult","dmgBuilding"), dmgT:tstat(e.side,"catapult","dmgTroop"),
-    color:"#a5895f", life:d/spd+0.2, flight:d/spd, t0:0, arc:Math.min(34,d*0.14), pkind:"boulder"});
+    color:"#a5895f", life:d/spd+0.2, flight:d/spd, t0:0, arc:Math.min(34,d*0.14), pkind:"boulder", hp:10});
   parts.push({x:sx,y:sy,vx:0,vy:0,life:.1,t:0,size:3,color:PAL.flash,flash:true});
   sfx("shoot");
 }
@@ -1265,6 +1278,32 @@ function fireMyTanks(x,y){                       // click-to-fire: every loaded 
     if(!e.dead && e.kind==="tank" && tankManual(e) && e.cd<=0){ fireShell(e,x,y); fired=true; }
   return fired;
 }
+// ballista: find the nearest ENEMY projectile with health (turret ball / catapult boulder / fireball) in range
+function nearestEnemyProjectile(e,range){
+  let best=null, bd=1e9;
+  for(const p of projs){
+    if(!(p.hp>0) || p.shotDown || !foe(p.side,e.side)) continue;
+    const d=hyp(p.x-e.x,p.y-e.y); if(d<=range && d<bd){ bd=d; best=p; }
+  }
+  for(const f of fireballs){
+    if(!(f.hp>0) || f.done || !foe(f.side,e.side)) continue;
+    const d=hyp(f.x-e.x,f.y-e.y); if(d<=range && d<bd){ bd=d; best=f; }
+  }
+  return best;
+}
+// ballista bolt: 1 damage to a projectile; when its HP runs out it's intercepted (destroyed, no detonation)
+function fireBolt(e,target){
+  target.hp-=KINDS.ballista.dmg;
+  e.boltT=0.13; e.boltX=target.x; e.boltY=target.y;
+  parts.push({x:e.x,y:e.y-2,vx:0,vy:0,life:.08,t:0,size:2,color:PAL.flash,flash:true});
+  sfx("shoot");
+  if(target.hp<=0){
+    if(target.pkind) target.shotDown=true;     // a projs[] entry — flagged so it won't detonate
+    else target.done=true;                     // a fireball — removed without exploding
+    boom(target.x,target.y,"#e8eefb",8);
+    floatText(target.x,target.y-8,"intercepted!","#cfe0ff");
+  }
+}
 
 // ============================== FIREBALL SPELL ==============================
 function launchSpells(){
@@ -1274,7 +1313,7 @@ function launchSpells(){
     const tower=ents.find(e=>e.kind==="tower" && e.side===s.side);
     const x0=tower?tower.x:(facesRight(s.side)?CELL:W-CELL), y0=tower?tower.y-10:6.5*CELL;
     const d=hyp(s.x-x0,s.y-y0);
-    fireballs.push({kind:s.kind||"fireball", side:s.side, x0,y0, tx:s.x, ty:s.y, t:0, dur:Math.max(.55, d/190)});
+    fireballs.push({kind:s.kind||"fireball", side:s.side, x0,y0, tx:s.x, ty:s.y, t:0, dur:Math.max(.55, d/190), hp:15});
   }
   spellsQueued=[]; myMarkers=[];
   if(fireballs.length) sfx("shoot");
@@ -1413,6 +1452,7 @@ function spellImpact(f){
 }
 function updateFireballs(dt){
   for(const f of fireballs){
+    if(f.done) continue;                           // intercepted by a ballista — skip movement & impact
     f.t+=dt;
     const p=Math.min(1,f.t/f.dur);
     const x=f.x0+(f.tx-f.x0)*p, y=f.y0+(f.ty-f.y0)*p;
@@ -1540,7 +1580,7 @@ function updateBattle(dt){
         // splash damage: cannonball explodes on impact, hitting everything in the blast radius
         if(e.cd<=0){
           e.cd=tstat(e.side,"turret","cd");
-          shoot(e,n.t,{dmg:tstat(e.side,"turret","dmg"),aoe:KINDS.turret.aoe,color:"#ffb347",spd:110,size:2.5,lift:5,pkind:"ball"});
+          shoot(e,n.t,{dmg:tstat(e.side,"turret","dmg"),aoe:KINDS.turret.aoe,color:"#ffb347",spd:110,size:2.5,lift:5,pkind:"ball",hp:5});
         }
       }
     }
@@ -1568,6 +1608,25 @@ function updateBattle(dt){
       if(n){
         e.aim=Math.atan2(n.t.y-e.y,n.t.x-e.x);
         if(e.cd<=0){ e.cd=tstat(e.side,"catapult","cd"); lobBoulder(e,n.t); }
+      }
+    }
+    else if(e.kind==="ballista"){                 // shoots down incoming enemy projectiles (burst, like the gun nest)
+      if(e.boltT>0) e.boltT-=dt;
+      if(e.reload>0){
+        e.reload-=dt;
+        if(e.reload<=0) e.mag=tstat(e.side,"ballista","mag");    // fresh magazine
+      } else {
+        if(e.mag===undefined) e.mag=tstat(e.side,"ballista","mag");
+        e.shotT=Math.max(0,(e.shotT||0)-dt);
+        const t=nearestEnemyProjectile(e, tstat(e.side,"ballista","range"));
+        if(t){
+          e.aim=Math.atan2(t.y-e.y,t.x-e.x);
+          if(e.shotT<=0 && e.mag>0){
+            e.shotT=KINDS.ballista.shotCd; e.mag--;
+            fireBolt(e,t);
+            if(e.mag<=0) e.reload=tstat(e.side,"ballista","reload");
+          }
+        }
       }
     }
     else if(e.kind==="duck"){
@@ -1611,6 +1670,7 @@ function updateBattle(dt){
   // projectiles
   for(const p of projs){
     p.x+=p.vx*dt; p.y+=p.vy*dt; p.life-=dt;
+    if(p.shotDown){ p.life=0; continue; }          // intercepted by a ballista — vanishes, never detonates
     if(p.siege){                                   // catapult boulder: arcs over troops, detonates on its target tile
       p.t0+=dt;
       if(hyp(p.x-p.tx,p.y-p.ty)<7 || p.life<=0){
@@ -2817,6 +2877,32 @@ function drawGunNest(e){
     ctx.fillStyle=PAL.white; ctx.fillText(hp,tx,ty);
   }
 }
+function drawBallista(e){
+  const x=e.gx*CELL, y=e.gy*CELL, col=teamCol(e.side);
+  const a=e.aim!==undefined?e.aim:(facesRight(e.side)?0:Math.PI);
+  // recently-fired bolt streak toward the target (drawn under the frame so the arm sits on top)
+  if(e.boltT>0){
+    ctx.globalAlpha=Math.max(0,e.boltT/0.13); ctx.strokeStyle="#e8eefb"; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(e.x+Math.cos(a)*6,e.y-1+Math.sin(a)*6); ctx.lineTo(e.boltX,e.boltY); ctx.stroke();
+    ctx.globalAlpha=1;
+  }
+  px(x+3,y+10,10,4,"#5a4326"); px(x+4,y+12,8,2,"#3a2a18");     // wooden base
+  ctx.save(); ctx.translate(e.x,e.y-1); ctx.rotate(a);
+  ctx.strokeStyle="#8a6a3f"; ctx.lineWidth=2; ctx.lineCap="round";
+  ctx.beginPath(); ctx.moveTo(2,-6); ctx.lineTo(2,6); ctx.stroke();          // bow arms (crossbar)
+  ctx.strokeStyle="#d8cba0"; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(2,-6); ctx.lineTo(-3,0); ctx.lineTo(2,6); ctx.stroke();   // bowstring
+  ctx.fillStyle="#6a4a2a"; ctx.fillRect(-3,-1.2,10,2.4);                     // stock/rail with loaded bolt
+  ctx.fillStyle="#cdd6e6"; ctx.fillRect(4,-0.6,4,1.2);                       // bolt tip
+  ctx.restore();
+  px(e.x-1,e.y+3,2,1,col);                                                   // team band
+  if(e.reload>0){                                                           // reload bar
+    const f=1-e.reload/tstat(e.side,"ballista","reload");
+    px(x+2,y+15,12,2,"#2a2f45"); px(x+2,y+15,Math.round(12*f),2,"#ffa65a");
+  }
+  drawUpgradeRing(e,8);
+  if(showBar(e)) drawHpBar(e,x+2,y-8,12);
+}
 function drawTurret(e){
   const x=e.gx*CELL,y=e.gy*CELL, me=facesRight(e.side), col=teamCol(e.side);
   px(x+3,y+9,10,6,PAL.stoneDark);
@@ -2935,6 +3021,7 @@ function rangeOf(e){
   if(e.kind==="tower")  return TOWER_LEVELS[e.level||1].range;
   if(e.kind==="turret") return tstat(e.side,"turret","range");
   if(e.kind==="gunnest") return gunRange(e.side);
+  if(e.kind==="ballista") return tstat(e.side,"ballista","range");
   if(e.kind==="archer") return tstat(e.side,"archer","range");
   if(e.kind==="tank")   return KINDS.tank.range;
   return 0;
@@ -3099,6 +3186,7 @@ function render(){
     else if(e.kind==="wall") drawWall(e);
     else if(e.kind==="harvester") drawHarvester(e);
     else if(e.kind==="turret") drawTurret(e);
+    else if(e.kind==="ballista") drawBallista(e);
     else if(e.kind==="gunnest") drawGunNest(e);
     else if(e.kind==="catapult") drawCatapult(e);
     else if(e.kind==="spikes") drawSpikes(e);
@@ -3261,6 +3349,8 @@ function setMsgText(t){ document.getElementById("msg").textContent=t; }
 
 // ============================== PATCH NOTES ==============================
     const PATCH_NOTES = [
+  ["6.30.23.17",["🎯 NEW CARD: BALLISTA (💰15) — shoots down incoming enemy PROJECTILES! Projectiles now have health: turret cannonballs 5, catapult boulders 10, fireballs 15.",
+          "Each bolt does 1 damage (always), firing every 0.75s in a burst of 7 (up to 10 upgraded), then reloading 10s → 5s. Upgrades add range and magazine. Buildable only in the BACK HALF of your side — cluster a few to melt siege fire out of the air."]],
   ["6.29.23.17",["⏸ Blitz mode has a PAUSE button (next to ☰ Menu)! It freezes everything — combat, income, building, even tank fire — until you hit Resume. Also fixed the battle timer label showing a negative countdown in Blitz."]],
   ["6.28.23.17",["⚔️ The FIGHT! button now sits right underneath the battlefield in every layout. On wide screens, the Show-ranges and Show-health toggles moved up into the empty space below the battlefield too."]],
   ["6.28.23.16",["🗂️ Compacter card bar on narrow windows: small sections now share a row when they fit (e.g., Troops + Spells side by side) instead of always stacking. Wide-screen side-panel layout unchanged."]],
@@ -3651,7 +3741,7 @@ function addToolSection(label, contents){
   return grid;
 }
 const CARD_CATS=[
-  ["Buildings", ["wall","gunnest","harvester","turret","spikes","catapult","duck","magicwell"]],
+  ["Buildings", ["wall","gunnest","harvester","turret","ballista","spikes","catapult","duck","magicwell"]],
   ["Troops",    ["soldier","archer","brute","tank"]],
   ["Spells",    ["fireball","heal","shield"]],
 ];

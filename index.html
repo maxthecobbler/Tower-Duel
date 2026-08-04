@@ -229,7 +229,7 @@
     </div>
   </div>
   <div id="menu">
-    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">6.30.23.17</span></h2>
+    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">6.30.24.17</span></h2>
     <div id="sceneSel">
       <button data-scene="forest" class="on">Forest</button>
       <button data-scene="beach">Beach</button>
@@ -378,11 +378,17 @@ let techs={p:{},b:{}};
 // One-time-use card MODIFIERS: activate during build (a button beside ⬆), effect lasts ONE turn, then it's spent.
 // More will be added over time (part of the "card" version tier). Starting set:
 const MODIFIERS = {
-  archer: { id:"flame", label:"Flaming Arrows", icon:"🔥", cost:6, burn:3,
+  archer:  { id:"flame", label:"Flaming Arrows", icon:"🔥", cost:6, burn:3,
     tip:"One-time (this turn only): your archers' arrows set the target on fire — 1 dmg/sec for 3s." },
+  soldier: { id:"vault", label:"Wall Vault", icon:"🦘", cost:3,
+    tip:"One-time (this turn only): your soldiers vault over enemy walls — they ignore them and pass right through instead of attacking." },
+  brute:   { id:"trample", label:"Trample", icon:"🥾", cost:4,
+    tip:"One-time (this turn only): your brutes trample straight through groves, destroying any trees they walk over for the REST of the game." },
 };
 let activeMods = {};                         // activeMods[side][card]=true while that modifier is armed for this turn
 function modArmed(side,card){ return !!(activeMods[side] && activeMods[side][card]); }
+function soldierVaults(e){ return e.kind==="soldier" && modArmed(e.side,"soldier"); }   // ignores enemy walls this turn
+function bruteTramples(e){ return e.kind==="brute"   && modArmed(e.side,"brute"); }      // flattens groves this turn
 function techLvl(side,kind){ return techs[side][kind]||1; }
 // stat lookup honouring the side's tech level; falls back to base KINDS stats
 function tstat(side,kind,field){
@@ -1124,9 +1130,10 @@ function bodyR(o){ return o.kind==="tower"?15 : o.kind==="catapult"?11 : o.build
 // priority inside detection radius: enemy troops > money bags > enemy buildings
 function acquireTarget(e, aggro){
   let bestT=null,bdT=1e9, bestB=null,bdB=1e9, bestBag=null,bdBag=1e9;
-  const isArcher=e.kind==="archer";
+  const isArcher=e.kind==="archer", vaults=soldierVaults(e);
   for(const o of ents){
     if(o.dead || !foe(o.side,e.side) || o.kind==="spikes") continue;   // traps are hidden — never targeted
+    if(o.kind==="wall" && vaults) continue;                            // vaulting soldiers ignore walls entirely
     if(o.kind==="gunnest"){                        // only ARCHERS can pick off a manned nest's gunner
       if(!(isArcher && o.gHp>0)) continue;         // melee ignores nests entirely — they break the wall instead
       const d=dist(e,o) - bodyR(o);
@@ -1150,8 +1157,10 @@ function acquireTarget(e, aggro){
 }
 // enemy buildings physically block troops (walls actually wall things off)
 function collideBuildings(e){
+  const vaults=soldierVaults(e);
   for(const o of ents){
     if(o.dead || !o.building || !foe(o.side,e.side) || o.kind==="spikes" || o.kind==="gunnest") continue;  // traps walked over; nests sit on walls (the wall blocks)
+    if(o.kind==="wall" && vaults) continue;         // vaulting soldiers pass straight through enemy walls
 
     const r=bodyR(o)+3;
     const dx=e.x-o.x, dy=e.y-o.y, d=hyp(dx,dy);
@@ -2228,18 +2237,35 @@ function blockedCell(gx,gy){
   }
   return false;
 }
+// trample: a brute flattens a whole grove it walks into — trees stay gone for the rest of the match
+function killGrove(g){
+  let killed=false;
+  for(const t of g.trees){
+    if(t.dead) continue;
+    t.dead=true; killed=true;
+    for(let i=0;i<6;i++) parts.push({x:t.x+rnd(-4,4),y:t.y+rnd(-6,2),vx:rnd(-32,32),vy:rnd(-46,-8),
+      life:rnd(.4,.85),t:0,size:rnd(1,2.5),color:Math.random()<.5?"#3a9a48":"#5cba5c"});
+  }
+  if(killed){ floatText(g.x,g.y-14,"TRAMPLED!","#7ee77a"); shake=Math.min(shake+1.5,8); sfx("boom"); }
+}
 function collideObstacles(e){
+  const tr=bruteTramples(e);
   for(const o of OBS_CIRCLES){
     if(o.g && !groveAlive(o.g)) continue;          // burned-down groves stop blocking
+    if(o.g && tr){                                  // trampling brute: crush the grove and walk through it
+      const dx=e.x-o.x, dy=e.y-o.y;
+      if(hyp(dx,dy) < o.r+bodyR(e)) killGrove(o.g);
+      continue;
+    }
     const dx=e.x-o.x, dy=e.y-o.y, d=hyp(dx,dy);
     if(d<o.r && d>0.001){ e.x=o.x+dx/d*o.r; e.y=o.y+dy/d*o.r; }
   }
 }
 // is the point `probe` ahead of e (heading `ang`) clear of every obstacle?
 function dirClear(e,ang,probe){
-  const nx=e.x+Math.cos(ang)*probe, ny=e.y+Math.sin(ang)*probe;
+  const nx=e.x+Math.cos(ang)*probe, ny=e.y+Math.sin(ang)*probe, tr=bruteTramples(e);
   for(const o of OBS_CIRCLES){
-    if(o.g && !groveAlive(o.g)) continue;
+    if(o.g && (!groveAlive(o.g) || tr)) continue;   // dead groves (and every grove, for a trampler) aren't obstacles
     if(hyp(nx-o.x,ny-o.y) < o.r + bodyR(e) + 1) return false;
   }
   return true;
@@ -2260,7 +2286,7 @@ function moveToward(e,tx,ty,spd,dt){
       // find the nearest blocking obstacle ahead
       let blocker=null, bd=1e9;
       for(const o of OBS_CIRCLES){
-        if(o.g && !groveAlive(o.g)) continue;
+        if(o.g && (!groveAlive(o.g) || bruteTramples(e))) continue;
         const d=hyp(e.x+Math.cos(base)*probe-o.x, e.y+Math.sin(base)*probe-o.y);
         if(d < o.r+bodyR(e)+1 && d<bd){ bd=d; blocker=o; }
       }
@@ -3349,6 +3375,8 @@ function setMsgText(t){ document.getElementById("msg").textContent=t; }
 
 // ============================== PATCH NOTES ==============================
     const PATCH_NOTES = [
+  ["6.30.24.17",["🦘 Two new one-time card MODIFIERS (arm them beside the ⬆ upgrade during build): Soldier 'Wall Vault' (💰3) — your soldiers ignore & pass straight through enemy walls this turn instead of attacking them.",
+          "🥾 Brute 'Trample' (💰4) — your brutes plow through groves, destroying any trees they walk over for the rest of the game."]],
   ["6.30.23.17",["🎯 NEW CARD: BALLISTA (💰75) — shoots down incoming enemy PROJECTILES! Projectiles now have health: turret cannonballs 5, catapult boulders 10, fireballs 15.",
           "Each bolt does 1 damage (always), firing every 0.75s in a burst of 7 (up to 10 upgraded), then reloading 10s → 5s. Upgrades add range and magazine. Buildable only in the BACK HALF of your side — cluster a few to melt siege fire out of the air."]],
   ["6.29.23.17",["⏸ Blitz mode has a PAUSE button (next to ☰ Menu)! It freezes everything — combat, income, building, even tank fire — until you hit Resume. Also fixed the battle timer label showing a negative countdown in Blitz."]],

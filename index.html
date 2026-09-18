@@ -23,6 +23,8 @@
     backdrop-filter:blur(2px)}
   #hud .gold{color:var(--accent);font-weight:bold;font-size:1.1em}
   #hud .dim{color:var(--dim);font-size:.9em}
+  #hud .eco{color:var(--text);font-weight:normal;margin-left:5px;opacity:.85}   /* opponent economy readout */
+  #hud .eco:empty{margin-left:0}
   #playArea{display:flex;flex-direction:column;align-items:center;width:100%}
   /* stacked layout: fieldCol dissolves so its children join #playArea's column; `order` slots the
      toolbar BETWEEN the fight button (right under the battlefield) and the ranges/health bars */
@@ -214,10 +216,10 @@
     <span class="dim">+<span id="incomeLbl">0</span><span id="incomeUnit">/turn</span></span>
     <span style="color:#c9a0ff;font-weight:bold">🔮 <span id="magic">0</span></span>
     <span class="dim">+<span id="magicIncLbl">0</span><span id="magicIncUnit">/turn</span></span>
-    <span class="dim">🔵 <b id="pHp" style="color:var(--you)"></b> HP · L<b id="pLv" style="color:var(--you)">1</b></span>
-    <span class="dim multi"><b id="cEmo">●</b> <b id="cHp"></b> HP · L<b id="cLv">1</b></span>
-    <span class="dim">🔴 <b id="bHp" style="color:var(--bot)"></b> HP · L<b id="bLv" style="color:var(--bot)">1</b></span>
-    <span class="dim four-only"><b id="dEmo" style="color:var(--orange)">●</b> <b id="dHp" style="color:var(--orange)"></b> HP · L<b id="dLv" style="color:var(--orange)">1</b></span>
+    <span class="dim">🔵 <b id="pHp" style="color:var(--you)"></b> HP · L<b id="pLv" style="color:var(--you)">1</b><span class="eco" id="pEco"></span></span>
+    <span class="dim multi"><b id="cEmo">●</b> <b id="cHp"></b> HP · L<b id="cLv">1</b><span class="eco" id="cEco"></span></span>
+    <span class="dim">🔴 <b id="bHp" style="color:var(--bot)"></b> HP · L<b id="bLv" style="color:var(--bot)">1</b><span class="eco" id="bEco"></span></span>
+    <span class="dim four-only"><b id="dEmo" style="color:var(--orange)">●</b> <b id="dHp" style="color:var(--orange)"></b> HP · L<b id="dLv" style="color:var(--orange)">1</b><span class="eco" id="dEco"></span></span>
   </div>
   <div id="tip"></div>
   <button id="menuBtn" onclick="quitToMenu()">☰ Menu</button>
@@ -229,7 +231,7 @@
     </div>
   </div>
   <div id="menu">
-    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">6.30.24.18</span></h2>
+    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">6.31.24.18</span></h2>
     <div id="sceneSel">
       <button data-scene="forest" class="on">Forest</button>
       <button data-scene="beach">Beach</button>
@@ -3387,6 +3389,7 @@ function setMsgText(t){ document.getElementById("msg").textContent=t; }
 
 // ============================== PATCH NOTES ==============================
     const PATCH_NOTES = [
+  ["6.31.24.18",["👀 Scout your rivals: the top bar now shows every opponent's 💰 gold and 🔮 mana next to their tower, plus how much they're earning each turn (+gold +mana). Works in 1v1, 1v1v1 and 2v2 (where you also see your teammate's economy)."]],
   ["6.30.24.18",["🎯 Fixed the ballista's aim: it now points its bolt at where arcing projectiles (fireballs & catapult boulders) actually are in the air, instead of their shadow on the ground."]],
   ["6.30.24.17",["🦘 Two new one-time card MODIFIERS (arm them beside the ⬆ upgrade during build): Soldier 'Wall Vault' (💰3) — your soldiers ignore & pass straight through enemy walls this turn instead of attacking them.",
           "🥾 Brute 'Trample' (💰4) — your brutes plow through groves, destroying any trees they walk over for the rest of the game."]],
@@ -3881,6 +3884,12 @@ function refreshUI(){
     const dc=teamCol("d");                          // 4th slot (2v2): team-red
     document.getElementById("dEmo").style.color=dc;
     document.getElementById("dHp").style.color=dc; document.getElementById("dLv").style.color=dc; }
+  // each OTHER side's economy (gold/mana + per-turn income) beside their tower — your own is the big display up top
+  for(const side of ["p","c","b","d"]){
+    const el=document.getElementById(side+"Eco");
+    if(side===mySide || !SIDES.includes(side)){ el.textContent=""; continue; }
+    el.textContent=` · 💰${golds[side]} +${income(side)} 🔮${magics[side]} +${magicIncome(side)}`;
+  }
   const building=canBuild();
   for(const key of Object.keys(KINDS)){
     const b=document.getElementById("tool_"+key);

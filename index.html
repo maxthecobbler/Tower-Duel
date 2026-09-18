@@ -82,7 +82,7 @@
     color:var(--you);font-family:var(--pix);font-size:.72em;font-weight:700;
     padding:0 4px;cursor:pointer;line-height:1.35;box-shadow:1px 1px 0 #000}
   .tool .info:hover{background:var(--you);color:#08202c}
-  .tool .ic{font-size:1.25em}
+  .tool .ic{width:26px;height:26px;image-rendering:pixelated;display:block;margin:1px auto 2px}
   .tool .nm{font-size:.82em;display:block;text-shadow:1px 1px 0 #000}
   .tool .cs{color:var(--accent);font-size:.82em;font-weight:700;text-shadow:1px 1px 0 #000}
   #fight{background:var(--accent);color:#221a05;font-weight:700;
@@ -212,7 +212,7 @@
     #hud .gold{font-size:1em}
     #toolbar{gap:4px;padding:6px}
     .tool{min-width:0;flex:1 1 auto;padding:5px 4px}
-    .tool .ic{font-size:1.1em}
+    .tool .ic{width:23px;height:23px}
     .tool .nm{font-size:.68em}
     .tool .cs{font-size:.7em}
     .tool .up{top:-7px;right:-4px;padding:0 6px;font-size:.68em}   /* bigger tap target */
@@ -258,7 +258,7 @@
     </div>
   </div>
   <div id="menu">
-    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">6.32.24.18</span></h2>
+    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">6.32.25.18</span></h2>
     <div id="sceneSel">
       <button data-scene="forest" class="on">Forest</button>
       <button data-scene="beach">Beach</button>
@@ -3416,6 +3416,7 @@ function setMsgText(t){ document.getElementById("msg").textContent=t; }
 
 // ============================== PATCH NOTES ==============================
     const PATCH_NOTES = [
+  ["6.32.25.18",["🖼️ Every card now has its own hand-drawn pixel-art symbol instead of an emoji — a little carved wall, a crossbow ballista, a windmill harvester, a flame, and so on — drawn in the same style as the battlefield sprites. (The Sell / Sell Troop / Tower buttons got custom icons too.)"]],
   ["6.32.24.18",["🎨 Full pixel-art UI overhaul! The cards, menu, HUD, buttons and bars now match the battlefield: chunky carved-stone tablets with hard bevels, a pixel font, and gold trim — no more sleek rounded panels. Everything's still fully readable (long patch-note text stays in a clean font on purpose)."]],
   ["6.31.24.18",["👀 Scout your rivals: the top bar now shows every opponent's 💰 gold and 🔮 mana next to their tower, plus how much they're earning each turn (+gold +mana). Works in 1v1, 1v1v1 and 2v2 (where you also see your teammate's economy)."]],
   ["6.30.24.18",["🎯 Fixed the ballista's aim: it now points its bolt at where arcing projectiles (fireballs & catapult boulders) actually are in the air, instead of their shadow on the ground."]],
@@ -3763,12 +3764,67 @@ function tipFor(key){
   }
   return html;
 }
+// ============================== HAND-DRAWN PIXEL CARD ICONS ==============================
+// each icon is drawn on a 16x16 canvas with flat pixel rects (same look as the battlefield sprites),
+// then scaled up crisp via image-rendering:pixelated — no emoji.
+const ICP={stone:"#9aa7c0",stoneD:"#5c6787",wood:"#7a5a34",woodD:"#3a2a18",
+  gold:"#ffd75e",goldD:"#c8992c",metal:"#c3c8d3",metalD:"#6d7280",dark:"#23262e",
+  grn:"#6ee77a",red:"#ff6b6b",blue:"#5fcde4",purp:"#c9a0ff",purpD:"#6b5c85",
+  flame:"#ff8c2e",ember:"#ffd75e",ylw:"#f5d33e",org:"#f08c1e",wht:"#f4f6fb",
+  tan:"#57503e",tanL:"#6f6650",mil:"#5d6b53",milD:"#3c4636"};
+const CARD_ICONS={
+  wall(p){ p(2,4,12,9,ICP.stoneD);p(3,5,10,7,ICP.stone);p(3,8,10,1,ICP.stoneD);
+    p(7,5,1,3,ICP.stoneD);p(5,9,1,3,ICP.stoneD);p(10,9,1,3,ICP.stoneD); },
+  gunnest(p){ p(2,9,12,4,ICP.tan);p(2,9,4,2,ICP.tanL);p(10,9,3,2,ICP.tanL);
+    p(7,6,2,3,ICP.metalD);p(8,7,6,1,ICP.dark);p(8,6,3,1,ICP.metalD); },
+  ballista(p){ p(3,7,10,2,ICP.metal);p(12,6,2,2,ICP.wht);
+    p(10,3,2,4,ICP.woodD);p(10,9,2,4,ICP.woodD);p(9,4,1,3,ICP.metalD);p(9,9,1,3,ICP.metalD);p(4,6,1,4,ICP.red); },
+  harvester(p){ p(5,9,6,5,ICP.woodD);p(6,10,4,3,"#3a6e5a");p(4,8,8,2,ICP.stoneD);
+    p(8,3,1,5,ICP.gold);p(6,5,5,1,ICP.gold);p(6,3,1,1,ICP.gold);p(10,3,1,1,ICP.gold);p(6,7,1,1,ICP.gold);p(10,7,1,1,ICP.gold); },
+  turret(p){ p(4,8,7,5,ICP.stoneD);p(5,9,5,3,ICP.stone);p(6,5,4,4,ICP.stoneD);p(7,6,2,2,ICP.stone);
+    p(9,6,5,2,ICP.dark);p(13,6,1,2,ICP.metal); },
+  spikes(p){ p(2,10,12,3,ICP.woodD);p(3,11,10,1,"#4a3c26");
+    for(const dx of [3,6,9,12]){ p(dx,6,1,4,ICP.metalD);p(dx,6,1,2,ICP.metal);p(dx,6,1,1,ICP.wht); } },
+  catapult(p){ p(2,10,12,2,ICP.woodD);p(3,12,2,1,ICP.dark);p(11,12,2,1,ICP.dark);
+    p(7,5,2,5,ICP.wood);p(5,3,4,3,ICP.stone);p(5,3,4,1,ICP.stoneD); },
+  duck(p){ p(4,8,7,4,ICP.ylw);p(4,9,2,2,"#e8c22e");p(9,5,4,4,ICP.ylw);p(12,6,2,2,ICP.org);
+    p(11,6,1,1,ICP.dark);p(6,12,1,1,ICP.org);p(9,12,1,1,ICP.org); },
+  magicwell(p){ p(5,3,6,6,ICP.purpD);p(6,3,4,4,ICP.purp);p(6,3,2,2,ICP.wht);p(6,9,4,2,ICP.gold);p(5,11,6,2,ICP.goldD); },
+  soldier(p){ p(11,3,2,2,ICP.wht);
+    for(let i=0;i<5;i++) p(10-i,4+i,2,2,ICP.metal);
+    p(4,9,4,1,ICP.gold);p(5,10,2,3,ICP.woodD);p(5,13,2,1,ICP.gold); },
+  archer(p){ p(3,4,2,2,ICP.wood);p(2,6,2,2,ICP.wood);p(2,8,2,2,ICP.wood);p(3,10,2,2,ICP.wood);
+    p(4,5,1,6,ICP.metalD);p(5,7,8,1,ICP.wood);p(12,6,2,3,ICP.metal);p(5,6,1,3,ICP.red); },
+  brute(p){ p(4,3,8,2,ICP.stoneD);p(4,5,8,3,ICP.stone);p(5,8,6,2,ICP.stone);p(6,10,4,1,ICP.stone);
+    p(7,11,2,1,ICP.stone);p(7,5,2,3,ICP.gold); },
+  tank(p){ p(2,10,12,3,ICP.dark);
+    for(const dx of [3,5,7,9,11]) p(dx,11,1,1,ICP.metalD);
+    p(4,6,8,4,ICP.milD);p(5,7,6,2,ICP.mil);p(6,4,4,3,ICP.milD);p(10,7,4,1,ICP.dark);p(13,7,1,1,ICP.metalD); },
+  fireball(p){ p(6,5,4,7,ICP.flame);p(5,8,1,3,ICP.flame);p(10,8,1,3,ICP.flame);
+    p(7,3,2,4,ICP.ember);p(7,8,2,3,ICP.ember);p(6,12,4,1,"#c94b1e"); },
+  heal(p){ p(4,5,3,3,ICP.grn);p(9,5,3,3,ICP.grn);p(4,7,8,2,ICP.grn);p(5,9,6,1,ICP.grn);
+    p(6,10,4,1,ICP.grn);p(7,11,2,1,ICP.grn);p(5,5,2,2,"#b8ffc4"); },
+  shield(p){ p(5,3,6,1,ICP.blue);p(5,12,6,1,ICP.blue);p(4,4,1,8,ICP.blue);p(11,4,1,8,ICP.blue);p(6,5,2,2,ICP.wht); },
+  _sell(p){ p(5,6,6,7,ICP.gold);p(6,7,4,5,"#e8c22e");p(5,4,6,2,ICP.woodD);p(6,3,4,1,ICP.woodD);
+    p(7,8,2,1,ICP.woodD);p(8,9,1,1,ICP.woodD);p(7,10,2,1,ICP.woodD); },
+  _selltroop(p){ p(11,3,2,2,ICP.wht);for(let i=0;i<6;i++) p(10-i,4+i,2,2,ICP.metal);
+    p(3,3,2,2,ICP.wht);for(let i=0;i<6;i++) p(4+i,4+i,2,2,ICP.metal);
+    p(4,11,2,2,ICP.gold);p(10,11,2,2,ICP.gold); },
+  _upgrade(p){ p(7,3,2,1,ICP.gold);p(6,4,4,1,ICP.gold);p(5,5,6,1,ICP.gold);p(4,6,8,1,ICP.gold);p(6,7,4,6,ICP.gold); },
+};
+function drawCardIcon(cv,key){
+  if(!cv) return;
+  const g=cv.getContext("2d"); g.imageSmoothingEnabled=false; g.clearRect(0,0,16,16);
+  const p=(x,y,w,h,c)=>{ g.fillStyle=c; g.fillRect(x,y,w,h); };
+  (CARD_ICONS[key]||CARD_ICONS.wall)(p);
+}
 function makeCardButton(key){
   const k=KINDS[key];
   const b=document.createElement("div");
   b.className="tool"; b.id="tool_"+key;
   const cur=k.spell?"🔮":"💰";
-  b.innerHTML=`<span class="ic">${k.icon}</span><span class="nm">${k.label} <span class="lvl" id="lvl_${key}"></span></span><span class="cs">${cur}${k.cost}</span>`;
+  b.innerHTML=`<canvas class="ic" width="16" height="16"></canvas><span class="nm">${k.label} <span class="lvl" id="lvl_${key}"></span></span><span class="cs">${cur}${k.cost}</span>`;
+  drawCardIcon(b.querySelector("canvas.ic"), key);
   b.onclick=ev=>{
     if(ev.target.classList.contains("up")||ev.target.classList.contains("mod")||ev.target.classList.contains("info")) return;
     if(b.classList.contains("disabled")) return;
@@ -3855,6 +3911,9 @@ upBtn.onmouseenter=()=>{
     `range ${cur.range}→${nx.range} · HP ${cur.hp}→${nx.hp}<br>Fires at up to 3 targets per volley.`);
 };
 upBtn.onmouseleave=hideTip;
+// persistent structure: the pixel up-arrow icon is drawn once; refreshUI only swaps the text
+upBtn.innerHTML=`<canvas class="ic" width="16" height="16"></canvas><span class="nm" id="upNm"></span><span class="cs" id="upCs"></span>`;
+drawCardIcon(upBtn.querySelector("canvas.ic"),"_upgrade");
 function buyUpgrade(){
   if(!canBuild()) return;
   const t=towerOf(mySide);
@@ -3870,14 +3929,16 @@ function buyUpgrade(){
 // sell mode button
 const sellBtn=document.createElement("div");
 sellBtn.className="tool"; sellBtn.id="tool_sell";
-sellBtn.innerHTML=`<span class="ic">💰</span><span class="nm">Sell</span><span class="cs">+50%</span>`;
+sellBtn.innerHTML=`<canvas class="ic" width="16" height="16"></canvas><span class="nm">Sell</span><span class="cs">+50%</span>`;
+drawCardIcon(sellBtn.querySelector("canvas.ic"),"_sell");
 sellBtn.onclick=()=>{ if(sellBtn.classList.contains("disabled"))return; selected=selected==="sell"?null:"sell"; refreshUI(); };
 sellBtn.onmouseenter=()=>showTip(`<b>💰 Sell</b><br>Click one of your buildings to sell it for 50% of its gold cost. The tower is not for sale.`);
 sellBtn.onmouseleave=hideTip;
 // sell-TROOP mode button — same as Sell but only targets troops (no mix-ups)
 const sellTroopBtn=document.createElement("div");
 sellTroopBtn.className="tool"; sellTroopBtn.id="tool_sellTroop";
-sellTroopBtn.innerHTML=`<span class="ic">⚔️</span><span class="nm">Sell Troop</span><span class="cs">+50%</span>`;
+sellTroopBtn.innerHTML=`<canvas class="ic" width="16" height="16"></canvas><span class="nm">Sell Troop</span><span class="cs">+50%</span>`;
+drawCardIcon(sellTroopBtn.querySelector("canvas.ic"),"_selltroop");
 sellTroopBtn.onclick=()=>{ if(sellTroopBtn.classList.contains("disabled"))return; selected=selected==="sellTroop"?null:"sellTroop"; refreshUI(); };
 sellTroopBtn.onmouseenter=()=>showTip(`<b>⚔️ Sell Troop</b><br>Click one of your troops to sell it for 50% of its gold cost. Only affects troops — never your buildings.`);
 sellTroopBtn.onmouseleave=hideTip;
@@ -3951,10 +4012,11 @@ function refreshUI(){
   sellTroopBtn.classList.toggle("selected", selected==="sellTroop");
   {
     const t=towerOf(mySide), lvl=t?t.level:1;
-    if(lvl>=4){ upBtn.innerHTML=`<span class="ic">⬆️</span><span class="nm">Tower MAX</span><span class="cs">L4</span>`; upBtn.disabled=true; }
+    const upNm=document.getElementById("upNm"), upCs=document.getElementById("upCs");
+    if(lvl>=4){ upNm.textContent="Tower MAX"; upCs.textContent="L4"; upBtn.disabled=true; }
     else {
       const cost=TOWER_LEVELS[lvl+1].cost;
-      upBtn.innerHTML=`<span class="ic">⬆️</span><span class="nm">${upgradeQueued?"Queued…":"Tower L"+(lvl+1)}</span><span class="cs">💰${cost}</span>`;
+      upNm.textContent = upgradeQueued?"Queued…":"Tower L"+(lvl+1); upCs.textContent="💰"+cost;
       upBtn.disabled = !building || upgradeQueued || golds[mySide]<cost;
     }
   }

@@ -4,25 +4,39 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>TowerFight — Battlefield</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
 <style>
   :root {
     --bg:#141420; --panel:#1c1e2e; --panel2:#252840; --accent:#ffd75e;
     --you:#5fcde4; --bot:#ff6b6b; --green:#7ee77a; --orange:#ffa65a; --text:#e8edf5; --dim:#8a93ad; --good:#6ee77a;
+    /* ---- pixel-art chrome palette (carved stone + wood, matching the battlefield) ---- */
+    --edge:#0e0f16;            /* hard near-black outer outline */
+    --panelbg:#20222e;         /* dark slab behind cards / toolbar / menu */
+    --stone:#454c62;           /* card & button face */
+    --stone-hi:#6d7691;        /* bevel highlight (top-left) */
+    --stone-sh:#292e3c;        /* bevel shadow (bottom-right) */
+    --gold-hi:#ffe89e; --gold-sh:#c8992c;
+    --pix:"Silkscreen","Segoe UI",system-ui,sans-serif;
+    --bevel: inset 2px 2px 0 var(--stone-hi), inset -2px -2px 0 var(--stone-sh);
+    --bevel-press: inset 2px 2px 0 var(--stone-sh), inset -2px -2px 0 var(--stone-hi);
   }
   *{box-sizing:border-box;margin:0;padding:0}
-  body{background:var(--bg);color:var(--text);font-family:"Segoe UI",system-ui,sans-serif;
+  body{background:var(--bg);color:var(--text);font-family:var(--pix);
     display:flex;flex-direction:column;align-items:center;padding:10px;min-height:100vh;
     -webkit-touch-callout:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
   button,input,.tool,#sceneSel button,#rangeBar button{touch-action:manipulation}
-  #wrap{position:relative;width:min(96vw,940px);overflow:hidden;border-radius:8px}
+  #wrap{position:relative;width:min(96vw,940px);overflow:hidden;
+    border:3px solid var(--edge);box-shadow:inset 0 0 0 2px #2c3444, 0 0 0 3px #0a0a10}
   canvas{width:100%;display:block;image-rendering:pixelated;image-rendering:crisp-edges;
-    border-radius:8px;border:2px solid #2c3050;background:#20283a;cursor:crosshair;touch-action:none}
+    background:#20283a;cursor:crosshair;touch-action:none}
   #hud{position:absolute;top:6px;left:50%;transform:translateX(-50%);z-index:3;
-    display:flex;gap:14px;align-items:center;font-size:.88em;white-space:nowrap;
-    background:rgba(14,17,28,.72);padding:4px 16px;border-radius:20px;border:1px solid #2c3050;
-    backdrop-filter:blur(2px)}
-  #hud .gold{color:var(--accent);font-weight:bold;font-size:1.1em}
-  #hud .dim{color:var(--dim);font-size:.9em}
+    display:flex;gap:14px;align-items:center;font-size:.9em;white-space:nowrap;
+    background:#161824ee;padding:5px 14px;border:2px solid var(--edge);
+    box-shadow:var(--bevel)}
+  #hud .gold{color:var(--accent);font-weight:700;font-size:1.05em}
+  #hud .dim{color:var(--dim);font-size:.92em}
   #hud .eco{color:var(--text);font-weight:normal;margin-left:5px;opacity:.85}   /* opponent economy readout */
   #hud .eco:empty{margin-left:0}
   #playArea{display:flex;flex-direction:column;align-items:center;width:100%}
@@ -35,107 +49,116 @@
   #healthBar{order:4}
   #toolbar{display:flex;flex-direction:column;gap:6px;align-items:stretch;
     margin-top:10px;width:min(96vw,940px);
-    background:var(--panel);padding:8px;border-radius:12px;border:1px solid #2c3050;
-    transition:opacity .3s}
+    background:var(--panelbg);padding:9px;border:3px solid var(--edge);
+    box-shadow:var(--bevel);transition:opacity .3s}
   #toolbar.away{opacity:.45;pointer-events:none}
   /* stacked layout: sections FLOW — small sections (Troops, Spells…) share a row when they fit */
   #cardSections{display:flex;flex-flow:row wrap;gap:8px 18px;width:100%;justify-content:center;align-items:stretch}
   /* card categories: label on the left, cards flowing to the right (default / narrow) */
   .cardSection{display:flex;align-items:center;gap:8px;flex:0 1 auto}
-  .secLabel{flex:0 0 60px;text-align:right;font-size:.6em;letter-spacing:1px;color:var(--dim);
-    font-weight:bold;text-transform:uppercase}
-  .cardGrid{display:flex;flex-wrap:wrap;gap:5px;flex:1;align-items:stretch;justify-content:flex-start}
-  .tool{position:relative;background:var(--panel2);border:2px solid #333a5c;border-radius:8px;color:var(--text);
-    font-family:inherit;padding:4px 7px;cursor:pointer;text-align:center;min-width:70px;transition:all .1s;user-select:none}
-  .tool:hover:not(:disabled):not(.disabled){border-color:var(--accent);transform:translateY(-2px)}
-  .tool.selected{border-color:var(--accent);background:#3a3417}
-  .tool:disabled,.tool.disabled{opacity:.35;cursor:not-allowed}
-  .tool .lvl{color:var(--good);font-size:.85em;font-weight:bold}
-  .tool .up{position:absolute;top:-9px;right:-6px;background:#2a3f2b;border:1px solid var(--good);
-    color:var(--good);border-radius:8px;font-family:inherit;font-size:.68em;font-weight:bold;
-    padding:1px 5px;cursor:pointer;line-height:1.3}
+  .secLabel{flex:0 0 62px;text-align:right;font-size:.72em;letter-spacing:1px;color:var(--accent);
+    font-weight:700;text-transform:uppercase;text-shadow:1px 1px 0 #000}
+  .cardGrid{display:flex;flex-wrap:wrap;gap:6px;flex:1;align-items:stretch;justify-content:flex-start}
+  .tool{position:relative;background:var(--stone);border:2px solid var(--edge);color:var(--text);
+    font-family:var(--pix);padding:5px 7px;cursor:pointer;text-align:center;min-width:72px;
+    box-shadow:var(--bevel);transition:filter .08s;user-select:none;image-rendering:pixelated}
+  .tool:hover:not(:disabled):not(.disabled){filter:brightness(1.18)}
+  .tool.selected{background:#5a5326;box-shadow:var(--bevel-press),0 0 0 2px var(--accent)}
+  .tool:disabled,.tool.disabled{opacity:.38;cursor:not-allowed;filter:none}
+  .tool .lvl{color:var(--good);font-size:.85em;font-weight:700}
+  /* corner badges: chunky pixel chips with a hard drop-outline */
+  .tool .up{position:absolute;top:-8px;right:-6px;background:#2f4a2f;border:2px solid var(--edge);
+    color:var(--good);font-family:var(--pix);font-size:.7em;font-weight:700;
+    padding:0 4px;cursor:pointer;line-height:1.35;box-shadow:1px 1px 0 #000}
   .tool .up:hover:not(:disabled){background:var(--good);color:#102412}
   .tool .up:disabled{opacity:.4;cursor:not-allowed}
-  .tool .mod{position:absolute;top:-9px;left:-6px;background:#3a2a18;border:1px solid var(--orange);
-    color:var(--orange);border-radius:8px;font-family:inherit;font-size:.62em;font-weight:bold;
-    padding:1px 4px;cursor:pointer;line-height:1.3}
+  .tool .mod{position:absolute;top:-8px;left:-6px;background:#4a3418;border:2px solid var(--edge);
+    color:var(--orange);font-family:var(--pix);font-size:.66em;font-weight:700;
+    padding:0 4px;cursor:pointer;line-height:1.35;box-shadow:1px 1px 0 #000}
   .tool .mod:hover:not(:disabled){background:var(--orange)}
-  .tool .mod.armed{background:var(--orange);color:#2a1a08;box-shadow:0 0 6px var(--orange)}
+  .tool .mod.armed{background:var(--orange);color:#2a1a08;box-shadow:1px 1px 0 #000,0 0 5px var(--orange)}
   .tool .mod:disabled{opacity:.4;cursor:not-allowed}
-  .tool .info{position:absolute;bottom:-9px;left:-6px;background:#1e2a44;border:1px solid var(--you);
-    color:var(--you);border-radius:8px;font-family:inherit;font-size:.68em;font-weight:bold;
-    padding:1px 5px;cursor:pointer;line-height:1.3}
+  .tool .info{position:absolute;bottom:-8px;left:-6px;background:#1e3352;border:2px solid var(--edge);
+    color:var(--you);font-family:var(--pix);font-size:.72em;font-weight:700;
+    padding:0 4px;cursor:pointer;line-height:1.35;box-shadow:1px 1px 0 #000}
   .tool .info:hover{background:var(--you);color:#08202c}
-  .tool .ic{font-size:1.2em}
-  .tool .nm{font-size:.75em;display:block}
-  .tool .cs{color:var(--accent);font-size:.75em;font-weight:bold}
-  #fight{background:var(--accent);color:#221a05;border:none;border-radius:8px;font-weight:bold;
-    font-family:inherit;font-size:1.05em;padding:6px 22px;cursor:pointer;min-width:120px}
-  #fight:hover:not(:disabled){filter:brightness(1.12)}
+  .tool .ic{font-size:1.25em}
+  .tool .nm{font-size:.82em;display:block;text-shadow:1px 1px 0 #000}
+  .tool .cs{color:var(--accent);font-size:.82em;font-weight:700;text-shadow:1px 1px 0 #000}
+  #fight{background:var(--accent);color:#221a05;font-weight:700;
+    font-family:var(--pix);font-size:1.1em;padding:8px 22px;cursor:pointer;min-width:120px;
+    border:3px solid var(--edge);box-shadow:inset 2px 2px 0 var(--gold-hi),inset -2px -2px 0 var(--gold-sh);
+    text-shadow:1px 1px 0 #ffeaa0}
+  #fight:hover:not(:disabled){filter:brightness(1.08)}
+  #fight:active:not(:disabled){box-shadow:inset 2px 2px 0 var(--gold-sh),inset -2px -2px 0 var(--gold-hi)}
   #fight:disabled{opacity:.4;cursor:not-allowed}
-  #msg{color:var(--dim);font-size:.85em;margin-top:6px;height:1.2em;text-align:center}
-  #banner{display:none;position:absolute;inset:0;background:rgba(10,12,22,.78);border-radius:8px;
-    flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:5}
+  #msg{color:var(--dim);font-size:.9em;margin-top:6px;height:1.2em;text-align:center}
+  #banner{display:none;position:absolute;inset:0;background:rgba(10,12,22,.82);
+    flex-direction:column;align-items:center;justify-content:center;gap:16px;z-index:5}
   #banner.show{display:flex}
-  #banner .big{font-size:2.2em;font-weight:bold;text-shadow:0 3px 12px #000}
-  #banner .bannerBtns{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
-  #banner button{background:var(--accent);border:none;border-radius:8px;padding:10px 26px;
-    font-family:inherit;font-weight:bold;font-size:1em;cursor:pointer;color:#221a05}
-  #banner button:last-child{background:var(--panel2);color:var(--text);border:2px solid #333a5c}
-  #menuBtn,#pauseBtn{position:absolute;top:6px;left:8px;z-index:4;background:rgba(14,17,28,.8);
-    border:1px solid #2c3050;border-radius:8px;color:var(--text);font-family:inherit;font-size:.8em;
-    font-weight:bold;padding:5px 10px;cursor:pointer;backdrop-filter:blur(2px)}
-  #pauseBtn{left:86px}
-  #menuBtn:hover,#pauseBtn:hover{border-color:var(--accent)}
+  #banner .big{font-size:2.1em;font-weight:700;text-shadow:3px 3px 0 #000}
+  #banner .bannerBtns{display:flex;gap:12px;flex-wrap:wrap;justify-content:center}
+  #banner button{background:var(--accent);border:3px solid var(--edge);padding:10px 26px;
+    font-family:var(--pix);font-weight:700;font-size:1em;cursor:pointer;color:#221a05;
+    box-shadow:inset 2px 2px 0 var(--gold-hi),inset -2px -2px 0 var(--gold-sh)}
+  #banner button:last-child{background:var(--stone);color:var(--text);box-shadow:var(--bevel)}
+  #menuBtn,#pauseBtn{position:absolute;top:6px;left:8px;z-index:4;background:#161824ee;
+    border:2px solid var(--edge);color:var(--text);font-family:var(--pix);font-size:.85em;
+    font-weight:700;padding:5px 10px;cursor:pointer;box-shadow:var(--bevel)}
+  #pauseBtn{left:92px}
+  #menuBtn:hover,#pauseBtn:hover{filter:brightness(1.2)}
   #menuBtn.hidden,#pauseBtn.hidden{display:none}
-  #pauseBtn.on{border-color:var(--accent);background:#3a3417}
-  kbd{background:#2c3050;border-radius:4px;padding:1px 5px;font-size:.85em}
-  #menu{position:fixed;inset:0;background:rgba(10,12,22,.93);z-index:30;
+  #pauseBtn.on{background:#5a5326;box-shadow:var(--bevel-press),0 0 0 2px var(--accent)}
+  kbd{background:#3a4058;border:1px solid var(--edge);padding:0 5px;font-size:.85em}
+  #menu{position:fixed;inset:0;background:rgba(10,12,22,.95);z-index:30;
     display:flex;flex-direction:column;align-items:center;gap:10px;overflow-y:auto;padding:12px 0}
   /* centers content when it fits, scrolls without clipping the top when it doesn't */
   #menu::before,#menu::after{content:"";margin:auto;flex-shrink:0}
   #menu>*{flex-shrink:0}
   #menu.hidden{display:none}
-  #menu h2{color:var(--accent);letter-spacing:2px;margin-bottom:6px}
-  #menu button{background:var(--panel2);border:2px solid #333a5c;border-radius:10px;color:var(--text);
-    font-family:inherit;font-size:1em;font-weight:bold;padding:10px 22px;cursor:pointer;min-width:240px}
-  #menu button:hover{border-color:var(--accent)}
+  #menu h2{color:var(--accent);letter-spacing:2px;margin-bottom:6px;text-shadow:3px 3px 0 #000}
+  #menu button{background:var(--stone);border:3px solid var(--edge);color:var(--text);
+    font-family:var(--pix);font-size:1.05em;font-weight:700;padding:11px 22px;cursor:pointer;min-width:240px;
+    box-shadow:var(--bevel);transition:filter .08s}
+  #menu button:hover{filter:brightness(1.18)}
+  #menu button:active{box-shadow:var(--bevel-press)}
   #menu .joinrow{display:flex;gap:6px}
   /* two mode columns: bots left, online right */
   #modeCols{display:flex;gap:16px;align-items:flex-start;justify-content:center}
   .modeCol{display:flex;flex-direction:column;gap:8px;align-items:stretch;width:180px}
-  .modeCol h3{color:var(--dim);font-size:.72em;letter-spacing:2px;text-align:center;margin:0;font-weight:bold}
-  #menu .modeCol button{min-width:0;width:100%;padding:10px 8px}
+  .modeCol h3{color:var(--accent);font-size:.8em;letter-spacing:2px;text-align:center;margin:0;font-weight:700;text-shadow:1px 1px 0 #000}
+  #menu .modeCol button{min-width:0;width:100%;padding:11px 8px}
   #menu .joinrow input{width:0;flex:1;min-width:60px}
-  #menu .joinrow button{min-width:0;width:auto;flex:none;padding:10px 14px}
-  #menu input{background:#10131f;border:2px solid #333a5c;border-radius:10px;color:var(--text);
-    font-family:inherit;font-size:1em;padding:10px;width:130px;text-transform:uppercase;text-align:center;
+  #menu .joinrow button{min-width:0;width:auto;flex:none;padding:11px 14px}
+  #menu input{background:#10131f;border:3px solid var(--edge);color:var(--text);box-shadow:var(--bevel-press);
+    font-family:var(--pix);font-size:1em;padding:10px;width:130px;text-transform:uppercase;text-align:center;
     letter-spacing:3px}
-  #menu .status{color:var(--dim);font-size:.9em;min-height:1.2em}
-  #menu .code{color:var(--accent);font-size:1.6em;font-weight:bold;letter-spacing:6px}
+  #menu .status{color:var(--dim);font-size:.92em;min-height:1.2em}
+  #menu .code{color:var(--accent);font-size:1.6em;font-weight:700;letter-spacing:6px;text-shadow:2px 2px 0 #000}
   #verBtn{cursor:pointer;text-decoration:underline dotted}
   #verBtn:hover{color:var(--accent)}
   #sceneSel{display:flex;gap:6px;margin-bottom:4px}
-  #sceneSel button{min-width:0;padding:7px 13px;font-size:.82em;opacity:.55;transition:opacity .1s}
-  #sceneSel button:hover{opacity:.85}
-  #sceneSel button.on{opacity:1;border-color:var(--accent);background:#3a3417}
-  .soundRow{display:flex;align-items:center;gap:8px;color:var(--dim);font-size:.85em;margin-bottom:2px}
-  .soundRow input[type=range]{-webkit-appearance:none;appearance:none;width:150px;height:8px;
-    border-radius:5px;background:#333a5c;cursor:pointer;outline:none}
-  .soundRow input[type=range]::-webkit-slider-runnable-track{height:8px;border-radius:5px;background:transparent}
-  .soundRow input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;margin-top:-3px;
-    width:14px;height:14px;border-radius:50%;background:#f4f6fb;border:2px solid var(--accent);cursor:pointer}
-  .soundRow input[type=range]::-moz-range-track{height:8px;border-radius:5px;background:transparent}
-  .soundRow input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;
-    background:#f4f6fb;border:2px solid var(--accent);cursor:pointer}
-  .soundRow span{min-width:38px;text-align:right;color:var(--text)}
-  .soundRow .lbl{min-width:44px;color:var(--dim);font-weight:bold;font-size:.9em}
+  #sceneSel button{min-width:0;padding:8px 13px;font-size:.85em;opacity:.6;transition:filter .08s,opacity .08s}
+  #sceneSel button:hover{opacity:.9}
+  #sceneSel button.on{opacity:1;background:#5a5326;box-shadow:var(--bevel-press),0 0 0 2px var(--accent)}
+  .soundRow{display:flex;align-items:center;gap:8px;color:var(--dim);font-size:.9em;margin-bottom:2px}
+  .soundRow input[type=range]{-webkit-appearance:none;appearance:none;width:150px;height:10px;
+    background:#10131f;border:2px solid var(--edge);cursor:pointer;outline:none;box-shadow:var(--bevel-press)}
+  .soundRow input[type=range]::-webkit-slider-runnable-track{height:6px;background:transparent}
+  .soundRow input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;margin-top:-4px;
+    width:12px;height:14px;background:var(--accent);border:2px solid var(--edge);cursor:pointer;
+    box-shadow:inset 1px 1px 0 var(--gold-hi),inset -1px -1px 0 var(--gold-sh)}
+  .soundRow input[type=range]::-moz-range-track{height:6px;background:transparent}
+  .soundRow input[type=range]::-moz-range-thumb{width:12px;height:14px;
+    background:var(--accent);border:2px solid var(--edge);cursor:pointer}
+  .soundRow span{min-width:40px;text-align:right;color:var(--text)}
+  .soundRow .lbl{min-width:44px;color:var(--accent);font-weight:700;font-size:.92em;text-shadow:1px 1px 0 #000}
   #rangeBar,#healthBar{display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;
-    margin-top:8px;width:min(96vw,940px);color:var(--dim);font-size:.85em}
-  #rangeBar button,#healthBar button{background:var(--panel2);border:2px solid #333a5c;border-radius:8px;color:var(--text);
-    font-family:inherit;font-size:.85em;padding:4px 12px;cursor:pointer;opacity:.7;transition:all .1s}
-  #rangeBar button:hover,#healthBar button:hover{opacity:1;border-color:var(--accent)}
-  #rangeBar button.on,#healthBar button.on{opacity:1;border-color:var(--accent);background:#3a3417}
+    margin-top:8px;width:min(96vw,940px);color:var(--text);font-size:.9em}
+  #rangeBar button,#healthBar button{background:var(--stone);border:2px solid var(--edge);color:var(--text);
+    font-family:var(--pix);font-size:.88em;padding:5px 12px;cursor:pointer;box-shadow:var(--bevel);transition:filter .08s}
+  #rangeBar button:hover,#healthBar button:hover{filter:brightness(1.18)}
+  #rangeBar button.on,#healthBar button.on{background:#5a5326;box-shadow:var(--bevel-press),0 0 0 2px var(--accent)}
   .three-only{display:none}
   body.three .three-only{display:inline}
   .four-only{display:none}
@@ -145,23 +168,27 @@
   #notes{position:fixed;inset:0;background:rgba(10,12,22,.97);z-index:31;
     display:none;flex-direction:column;padding:14px 18px}
   #notes.show{display:flex}
-  #notes h2{color:var(--accent);letter-spacing:2px;margin-bottom:8px;flex:none}
-  #notesBody{overflow-y:auto;flex:1;font-size:.85em;line-height:1.5;padding-right:8px}
-  #notesBody h3{color:var(--accent);margin:10px 0 2px;font-size:1.05em}
+  #notes h2{color:var(--accent);letter-spacing:2px;margin-bottom:8px;flex:none;text-shadow:2px 2px 0 #000}
+  /* patch-notes body stays a clean readable font — it's a wall of text, legibility first */
+  #notesBody{overflow-y:auto;flex:1;font-size:.9em;line-height:1.55;padding-right:8px;
+    font-family:"Segoe UI",system-ui,sans-serif}
+  #notesBody h3{color:var(--accent);margin:10px 0 2px;font-size:1.05em;font-family:var(--pix)}
   #notesBody li{margin-left:18px;color:var(--text)}
-  #notesClose{flex:none;align-self:center;margin-top:10px;background:var(--accent);border:none;
-    border-radius:8px;padding:8px 24px;font-family:inherit;font-weight:bold;cursor:pointer;color:#221a05}
+  #notesClose{flex:none;align-self:center;margin-top:10px;background:var(--accent);border:3px solid var(--edge);
+    padding:9px 24px;font-family:var(--pix);font-weight:700;cursor:pointer;color:#221a05;
+    box-shadow:inset 2px 2px 0 var(--gold-hi),inset -2px -2px 0 var(--gold-sh)}
   #tip{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);z-index:4;
-    background:rgba(14,17,28,.95);border:1px solid var(--accent);border-radius:8px;
-    padding:7px 12px;font-size:.8em;max-width:340px;text-align:center;color:var(--text);
+    background:#12141fF2;border:2px solid var(--accent);box-shadow:var(--bevel),0 0 0 2px var(--edge);
+    padding:8px 12px;font-size:.85em;max-width:340px;text-align:center;color:var(--text);line-height:1.4;
     pointer-events:none;display:none}
   #tip b{color:var(--accent)}
   /* virtual joystick: drives the tank on touch screens */
   #joy{position:fixed;left:14px;bottom:14px;width:110px;height:110px;border-radius:50%;
-    background:rgba(20,24,40,.55);border:2px solid #333a5c;z-index:8;display:none;
+    background:rgba(20,24,40,.55);border:3px solid var(--edge);box-shadow:inset 0 0 0 2px #3a4058;z-index:8;display:none;
     touch-action:none;user-select:none;-webkit-user-select:none}
   #joyKnob{position:absolute;left:50%;top:50%;width:44px;height:44px;margin:-22px 0 0 -22px;
-    border-radius:50%;background:var(--panel2);border:2px solid var(--accent);pointer-events:none}
+    border-radius:50%;background:var(--stone);border:3px solid var(--edge);
+    box-shadow:var(--bevel);pointer-events:none}
   /* ---------- wide screens: card panel moves to the LEFT of the battlefield, categories as columns ---------- */
   @media (min-width:1300px){
     #playArea{flex-direction:row-reverse;align-items:flex-start;justify-content:center;gap:14px;width:auto}
@@ -173,7 +200,7 @@
     #toolbar{width:auto;margin-top:0}
     #cardSections{flex-flow:row nowrap;align-items:flex-start;gap:0}
     .cardSection{flex-direction:column;align-items:center;gap:5px;padding:0 8px}
-    .cardSection:not(:last-child){padding-bottom:0;border-bottom:none;border-right:1px solid #2c3050}
+    .cardSection:not(:last-child){padding-bottom:0;border-bottom:none;border-right:2px solid var(--edge)}
     .cardGrid{flex-direction:column;flex:none;align-items:stretch;justify-content:flex-start}
     .secLabel{flex:none;width:100%;text-align:center}
   }
@@ -181,16 +208,16 @@
   @media (max-width:640px){
     body{padding:4px}
     #wrap,#toolbar{width:100vw}
-    #hud{gap:6px;font-size:.66em;padding:3px 8px;flex-wrap:wrap;justify-content:center;max-width:97vw}
+    #hud{gap:6px;font-size:.72em;padding:4px 8px;flex-wrap:wrap;justify-content:center;max-width:97vw}
     #hud .gold{font-size:1em}
     #toolbar{gap:4px;padding:6px}
     .tool{min-width:0;flex:1 1 auto;padding:5px 4px}
-    .tool .ic{font-size:1.05em}
-    .tool .nm{font-size:.6em}
-    .tool .cs{font-size:.62em}
-    .tool .up{top:-7px;right:-4px;padding:2px 6px;font-size:.62em}   /* bigger tap target */
-    .tool .info{bottom:-7px;left:-4px;padding:2px 7px;font-size:.7em}   /* bigger tap target */
-    .secLabel{flex-basis:100%;text-align:left;font-size:.62em;margin-bottom:1px}   /* label on its own line */
+    .tool .ic{font-size:1.1em}
+    .tool .nm{font-size:.68em}
+    .tool .cs{font-size:.7em}
+    .tool .up{top:-7px;right:-4px;padding:0 6px;font-size:.68em}   /* bigger tap target */
+    .tool .info{bottom:-7px;left:-4px;padding:0 7px;font-size:.74em}   /* bigger tap target */
+    .secLabel{flex-basis:100%;text-align:left;font-size:.7em;margin-bottom:1px}   /* label on its own line */
     .cardSection{flex-wrap:wrap;flex:1 1 auto}    /* sections sharing a row split the width */
     #fight{font-size:1em;padding:8px 18px;min-width:0;flex:none;width:100vw}
     #tip{max-width:92vw;font-size:.75em}
@@ -231,7 +258,7 @@
     </div>
   </div>
   <div id="menu">
-    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">6.31.24.18</span></h2>
+    <h2>TOWERFIGHT <span id="verBtn" style="font-size:.5em;color:var(--dim)" onclick="showNotes()" title="Patch notes">6.32.24.18</span></h2>
     <div id="sceneSel">
       <button data-scene="forest" class="on">Forest</button>
       <button data-scene="beach">Beach</button>
@@ -3389,6 +3416,7 @@ function setMsgText(t){ document.getElementById("msg").textContent=t; }
 
 // ============================== PATCH NOTES ==============================
     const PATCH_NOTES = [
+  ["6.32.24.18",["🎨 Full pixel-art UI overhaul! The cards, menu, HUD, buttons and bars now match the battlefield: chunky carved-stone tablets with hard bevels, a pixel font, and gold trim — no more sleek rounded panels. Everything's still fully readable (long patch-note text stays in a clean font on purpose)."]],
   ["6.31.24.18",["👀 Scout your rivals: the top bar now shows every opponent's 💰 gold and 🔮 mana next to their tower, plus how much they're earning each turn (+gold +mana). Works in 1v1, 1v1v1 and 2v2 (where you also see your teammate's economy)."]],
   ["6.30.24.18",["🎯 Fixed the ballista's aim: it now points its bolt at where arcing projectiles (fireballs & catapult boulders) actually are in the air, instead of their shadow on the ground."]],
   ["6.30.24.17",["🦘 Two new one-time card MODIFIERS (arm them beside the ⬆ upgrade during build): Soldier 'Wall Vault' (💰3) — your soldiers ignore & pass straight through enemy walls this turn instead of attacking them.",
